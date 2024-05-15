@@ -11,7 +11,8 @@ from common import (
     get_greedy,
     get_beam_search,
     get_scheduler_config,
-    compare_results
+    compare_results,
+    run_pa
 )
 
 # tested models:
@@ -36,7 +37,6 @@ def test_real_models(tmp_path, model_id):
     run_test_pipeline(tmp_path, model_id)
 
 
-@pytest.mark.precommit
 def test_eos_beam_search(tmp_path):
     '''
     Current test checks that in case of beam search, some generation results
@@ -91,3 +91,13 @@ def test_eos_greedy(tmp_path):
     for prompt, hf_result, ov_result, generation_config in zip(prompts, hf_results, ov_results, generation_configs):
         print(f"Prompt = {prompt}\nHF result = {hf_result}\nOV result = {ov_result}")
         compare_results(hf_result, ov_result, generation_config)
+
+@pytest.mark.precommit
+@pytest.mark.parametrize("model_id", get_models_list("models/precommit"))
+def test_pa_precommit(tmp_path, model_id):
+    run_pa(tmp_path, model_id)
+
+@pytest.mark.nightly
+@pytest.mark.parametrize("model_id", get_models_list("models/nightly"))
+def test_pa_nightly(tmp_path, model_id):
+    run_pa(tmp_path, model_id)
