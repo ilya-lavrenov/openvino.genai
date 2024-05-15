@@ -10,6 +10,7 @@ from py_continuous_batching import ContinuousBatchingPipeline, GenerationConfig,
 from transformers import AutoTokenizer, AutoModelForCausalLM
 from transformers import GenerationConfig as HFGenerationConfig
 from typing import List, Tuple
+from openvino._pyopenvino.op import _PagedAttentionExtension
 
 
 def get_greedy() -> GenerationConfig:
@@ -188,3 +189,23 @@ def run_test_pipeline(tmp_path: str, model_id: str, scheduler_params: dict = Non
     for prompt, hf_result, ov_result, generation_config in zip(prompts, hf_results, ov_results, generation_configs):
         print(f"Prompt = {prompt}\nHF result = {hf_result}\nOV result = {ov_result}")
         compare_results(hf_result, ov_result, generation_config)
+
+def run_pa(tmp_path, model_id):
+    prompts, generation_configs = get_test_dataset()
+    scheduler_config = get_scheduler_config(None)
+    hf_tokenizer = AutoTokenizer.from_pretrained(model_id)
+    model = OVModelForCausalLM.from_pretrained(model_id, export=True)
+    model_path : Path = tmp_path / model_id
+    model.save_pretrained(model_path)
+
+    from openvino_tokenizers import convert_tokenizer
+    from openvino import serialize
+    tokenizer, detokenizer = convert_tokenizer(hf_tokenizer, with_detokenizer=True)
+    serialize(tokenizer, model_path / "openvino_tokenizer.xml")
+    serialize(detokenizer, model_path / "openvino_detokenizer.xml")
+
+    pipe = ContinuousBatchingPipeline(model_path.absolute().as_posix(), scheduler_config)
+    pipe.generate(prompts, generation_configs)
+
+    ov_model = pipe.get_model()
+    assert any(isinstance(op, _PagedAttentionExtension) for op in ov_model.get_ordered_ops())

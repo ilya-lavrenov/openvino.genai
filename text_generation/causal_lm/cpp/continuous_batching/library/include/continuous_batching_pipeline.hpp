@@ -32,6 +32,8 @@ public:
 
     GenerationConfig get_config() const;
 
+    std::shared_ptr<ov::Model> get_model();
+
     void add_request(uint64_t request_id, std::string prompt, GenerationConfig sampling_params);
 
     std::vector<GenerationResult> step();

@@ -47,6 +47,7 @@ class ContinuousBatchingPipeline::Impl {
     std::shared_ptr<CacheManager> m_cache_manager;
     std::shared_ptr<ModelRunner> m_model_runner;
     std::shared_ptr<Sampler> m_sampler;
+    std::shared_ptr<ov::Model> m_model;
 
     GenerationConfig m_generation_config;
 
@@ -80,13 +81,13 @@ public:
         m_tokenizer = std::make_shared<Tokenizer>(models_path);
 
         // The model can be compiled for GPU as well
-        std::shared_ptr<ov::Model> model = core.read_model(models_path + "/openvino_model.xml");
+        m_model = core.read_model(models_path + "/openvino_model.xml");
 
         const std::string device = "CPU";
         DeviceConfig device_config(core, scheduler_config, device);
 
-        apply_paged_attention_transformations(model, device_config);
-        ov::InferRequest infer_request = core.compile_model(model, device_config.get_device(), ov::enable_profiling(true)).create_infer_request();
+        apply_paged_attention_transformations(m_model, device_config);
+        ov::InferRequest infer_request = core.compile_model(m_model, device_config.get_device(), ov::enable_profiling(true)).create_infer_request();
 
         // setup KV caches
         m_cache_manager = std::make_shared<CacheManager>(device_config);
@@ -109,6 +110,10 @@ public:
 
     std::shared_ptr<Tokenizer> get_tokenizer() {
         return m_tokenizer;
+    }
+
+    std::shared_ptr<ov::Model> get_model() {
+        return m_model;
     }
 
     void add_request(uint64_t request_id, std::string prompt, GenerationConfig sampling_params) {
@@ -257,6 +262,10 @@ std::shared_ptr<Tokenizer> ContinuousBatchingPipeline::get_tokenizer() {
 
 GenerationConfig ContinuousBatchingPipeline::get_config() const{
     return m_impl->get_config();
+}
+
+std::shared_ptr<ov::Model> ContinuousBatchingPipeline::get_model() {
+    return m_impl->get_model();
 }
 
 void ContinuousBatchingPipeline::add_request(uint64_t request_id, std::string prompt, GenerationConfig sampling_params) {

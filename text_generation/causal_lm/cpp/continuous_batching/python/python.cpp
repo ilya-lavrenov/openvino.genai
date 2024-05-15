@@ -97,6 +97,7 @@ PYBIND11_MODULE(py_continuous_batching, m) {
         .def(py::init<const std::string &, const SchedulerConfig&>())
         .def("get_tokenizer", &ContinuousBatchingPipeline::get_tokenizer)
         .def("get_config", &ContinuousBatchingPipeline::get_config)
+        .def("get_model", &ContinuousBatchingPipeline::get_model)
         .def("add_request", &ContinuousBatchingPipeline::add_request)
         .def("step", &ContinuousBatchingPipeline::step)
         .def("has_running_requests", &ContinuousBatchingPipeline::has_running_requests)
@@ -107,4 +108,20 @@ PYBIND11_MODULE(py_continuous_batching, m) {
         .def("encode", &Tokenizer::encode)
         .def("decode", &Tokenizer::decode)
         .def("get_eos_token_id", &Tokenizer::get_eos_token_id);
+
+
+    py::class_<ov::Model, std::shared_ptr<ov::Model>> model(m, "Model");
+            model.def(py::init([](const std::shared_ptr<ov::Model>& other) {
+                return other;
+            }),
+            py::arg("other"));
+
+            model.def("get_ordered_ops", &ov::Model::get_ordered_ops,
+                R"(
+                    Return ops used in the model in topological order.
+
+                    :return: List of sorted Nodes representing ops used in model.
+                    :rtype: List[openvino.runtime.Node]
+                )");
+
 }
