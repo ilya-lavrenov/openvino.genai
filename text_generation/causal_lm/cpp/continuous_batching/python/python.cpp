@@ -124,4 +124,5 @@ PYBIND11_MODULE(py_continuous_batching, m) {
                     :rtype: List[openvino.runtime.Node]
                 )");
 
+            model.def_property_readonly("inputs", (std::vector<ov::Output<ov::Node>>(ov::Model::*)()) & ov::Model::inputs);
 }

@@ -211,4 +211,11 @@ def run_pa(tmp_path, model_id):
     pipe.generate(prompts, generation_configs)
 
     ov_model = pipe.get_model()
-    assert any(isinstance(op, _PagedAttentionExtension) for op in ov_model.get_ordered_ops())
+    assert any(isinstance(op, _PagedAttentionExtension) for op in ov_model.get_ordered_ops()), f"{model_id} : no _PagedAttentionExtension present in the model."
+
+    model_inputs = ov_model.inputs
+    for input in model_inputs:
+        names = list(input.get_names()) # names stored in as set (in this case usually of 1 element)
+        for name in names:
+            if (("key_cache." in name) or ("value_cache." in name)):
+                assert input.get_partial_shape().is_static, f"{model_id} {name} is not static.c."
