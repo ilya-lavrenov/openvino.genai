@@ -36,9 +36,9 @@ int main(int argc, char* argv[]) try {
     
     SchedulerConfig scheduler_config {
         // batch size
-        .max_num_batched_tokens = 32,
+        .max_num_batched_tokens = 256,
         // cache params
-        .num_kv_blocks = 364,
+        .cache_size = 8,
         .block_size = 32,
         // mode - vLLM or dynamic_split_fuse
         .dynamic_split_fuse = true,
@@ -70,8 +70,12 @@ int main(int argc, char* argv[]) try {
     }
     std::cout << std::endl;
 
-    auto results = pipe.generate(std::vector<std::string>{prompt}, std::vector<GenerationConfig>{GenerationConfig::greedy()});
-    std::cout << "Model response: " << results[0].m_generation_ids[0] << std::endl;
+    GenerationConfig sampling_params = GenerationConfig::greedy();
+    auto results = pipe.generate(std::vector<std::string>{prompt}, std::vector<GenerationConfig>{sampling_params});
+    if (results[0].m_status != GenerationStatus::FINISHED)
+        std::cout << "Generation not finished properly" << std::endl;
+    else
+        std::cout << "Model response: " << results[0].m_generation_ids[0] << std::endl;
 
     // For now this sample is used to check template processing. 
     // Ultimately we could make it a full, interactive chat sample. 

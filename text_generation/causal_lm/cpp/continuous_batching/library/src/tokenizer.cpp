@@ -23,18 +23,17 @@ class Tokenizer::Impl {
     // EOS token ID read from OV model
     std::size_t m_eos_token_id;
 
-    // Configuration from tokenizer_config.json 
-    std::string m_eos_token;
-    std::string m_bos_token;
-    std::string m_chat_template;
-
-    // Synchronization. Using multiple infer requests hangs. For now we synchronize entire execution on a single infer request.
-    std::mutex m_tokenizer_mutex;
-    std::mutex m_detokenizer_mutex;
+    // Configuration from tokenizer_config.json
+    // Empty strings if we don't have such config for the model 
+    std::string m_eos_token = "";
+    std::string m_bos_token = "";
+    std::string m_chat_template = "";
 
     // Chat template handling
-    std::unique_ptr<jinja2::TemplateEnv> m_template_env;
-    std::unique_ptr<jinja2::Template> m_processed_chat_template;
+    std::unique_ptr<jinja2::TemplateEnv> m_template_env = nullptr;
+    std::unique_ptr<jinja2::Template> m_processed_chat_template = nullptr;
+
+    std::mutex m_tokenizer_mutex, m_detokenizer_mutex;
 
 public:
     explicit Impl(const std::string& models_path)
@@ -54,18 +53,19 @@ public:
             models_path + "/openvino_detokenizer.xml", "CPU").create_infer_request();
 
         std::ifstream tokenizer_config(models_path + "/tokenizer_config.json");
-        OPENVINO_ASSERT(tokenizer_config.good(), "Failed to read tokenizer_config.json from the models path");
-        nlohmann::json json_data = nlohmann::json::parse(tokenizer_config);
+        if(tokenizer_config.good()) {
+            nlohmann::json json_data = nlohmann::json::parse(tokenizer_config);
 
-        m_bos_token = json_data.value("bos_token", "");
-        m_eos_token = json_data.value("eos_token", "");
-        m_chat_template = json_data.value("chat_template", "");
+            m_bos_token = json_data.value("bos_token", "");
+            m_eos_token = json_data.value("eos_token", "");
+            m_chat_template = json_data.value("chat_template", "");
 
-        m_template_env = std::make_unique<jinja2::TemplateEnv>();
-        m_template_env->GetSettings().lstripBlocks = true;
-        m_template_env->GetSettings().trimBlocks = true;
-        m_processed_chat_template = std::make_unique<jinja2::Template>(m_template_env.get());
-        m_processed_chat_template->Load(m_chat_template);
+            m_template_env = std::make_unique<jinja2::TemplateEnv>();
+            m_template_env->GetSettings().lstripBlocks = true;
+            m_template_env->GetSettings().trimBlocks = true;
+            m_processed_chat_template = std::make_unique<jinja2::Template>(m_template_env.get());
+            m_processed_chat_template->Load(m_chat_template);
+        }
     }
 
     ov::Tensor encode(std::string prompt) {
@@ -90,6 +90,9 @@ public:
     }
 
     std::string apply_chat_template(chat_t chat) {
+        if (m_processed_chat_template == nullptr) {
+            throw std::runtime_error("Error during applying template: chat template has not been loaded");
+        }
         try {
             jinja2::ValuesList valuesList;
             for (auto& m : chat) {
@@ -107,11 +110,9 @@ public:
             std::string text = m_processed_chat_template->RenderAsString(params).value();
             return text;
         } catch (const std::exception& error) {
-            std::cerr << "Error during applying chat template: " << error.what() << std::endl;
-            throw;
+            throw std::runtime_error(std::string("Error during applying chat template: ") + error.what());
         } catch (...) {
-            std::cerr << "Unexpected error during applying chat template \n";
-            throw;
+            throw(std::runtime_error("Unexpected error during applying chat template"));
         }
     }
 };
