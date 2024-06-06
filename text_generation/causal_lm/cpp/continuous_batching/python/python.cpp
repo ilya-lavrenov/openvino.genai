@@ -99,7 +99,8 @@ PYBIND11_MODULE(py_continuous_batching, m) {
         .def(py::init<const std::string &, const SchedulerConfig&>())
         .def("get_tokenizer", &ContinuousBatchingPipeline::get_tokenizer)
         .def("get_config", &ContinuousBatchingPipeline::get_config)
-        .def("add_request", &ContinuousBatchingPipeline::add_request)
+        .def("add_request", py::overload_cast<uint64_t, std::string, GenerationConfig>(&ContinuousBatchingPipeline::add_request))
+        .def("add_request", py::overload_cast<uint64_t, std::vector<std::unordered_map<std::string, std::string>>, GenerationConfig>(&ContinuousBatchingPipeline::add_request))
         .def("step", &ContinuousBatchingPipeline::step)
         .def("has_non_finished_requests", &ContinuousBatchingPipeline::has_non_finished_requests)
         .def("generate", &ContinuousBatchingPipeline::generate);

@@ -10,6 +10,8 @@
 
 #include "openvino/runtime/tensor.hpp"
 
+using chat_t = std::vector<std::unordered_map<std::string, std::string>>;
+
 class Tokenizer {
     class Impl;
     std::shared_ptr<Impl> m_impl;
@@ -24,4 +26,6 @@ public:
     std::string decode(std::vector<int64_t> tokens);
 
     size_t get_eos_token_id() const;
+
+    std::string apply_chat_template(chat_t chat);
 };

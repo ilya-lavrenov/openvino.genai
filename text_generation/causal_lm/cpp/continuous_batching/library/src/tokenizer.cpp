@@ -3,18 +3,38 @@
 // SPDX-License-Identifier: Apache-2.0
 
 #include <mutex>
+#include <fstream>
+
+#include <jinja2cpp/template.h>
+#include <jinja2cpp/template_env.h>
+#include "nlohmann/json.hpp"
+
 #include "openvino/runtime/core.hpp"
 
 #include "tokenizer.hpp"
 
 class Tokenizer::Impl {
     const size_t TOKENIZER_BATCH_SIZE = 1;
+
+    // Execution 
     ov::InferRequest m_tokenizer;
     ov::InferRequest m_detokenizer;
+
+    // EOS token ID read from OV model
     std::size_t m_eos_token_id;
-    //Using multiple infer requests hangs. For now we synchronize entire execution on a single infer request.
+
+    // Configuration from tokenizer_config.json 
+    std::string m_eos_token;
+    std::string m_bos_token;
+    std::string m_chat_template;
+
+    // Synchronization. Using multiple infer requests hangs. For now we synchronize entire execution on a single infer request.
     std::mutex m_tokenizer_mutex;
     std::mutex m_detokenizer_mutex;
+
+    // Chat template handling
+    std::unique_ptr<jinja2::TemplateEnv> m_template_env;
+    std::unique_ptr<jinja2::Template> m_processed_chat_template;
 
 public:
     explicit Impl(const std::string& models_path)
@@ -32,6 +52,20 @@ public:
             tokenizer_model, "CPU").create_infer_request();
         m_detokenizer = core.compile_model(
             models_path + "/openvino_detokenizer.xml", "CPU").create_infer_request();
+
+        std::ifstream tokenizer_config(models_path + "/tokenizer_config.json");
+        nlohmann::json json_data = nlohmann::json::parse(tokenizer_config);
+
+        std::cout << "Read tokenizer config" << std::endl;
+        m_bos_token = json_data.value("bos_token", "");
+        m_eos_token = json_data.value("eos_token", "");
+        m_chat_template = json_data.value("chat_template", "");
+
+        m_template_env = std::make_unique<jinja2::TemplateEnv>();
+        m_template_env->GetSettings().lstripBlocks = true;
+        m_template_env->GetSettings().trimBlocks = true;
+        m_processed_chat_template = std::make_unique<jinja2::Template>(m_template_env.get());
+        m_processed_chat_template->Load(m_chat_template);
     }
 
     ov::Tensor encode(std::string prompt) {
@@ -54,6 +88,24 @@ public:
     size_t get_eos_token_id() const {
         return m_eos_token_id;
     }
+
+    std::string apply_chat_template(chat_t chat) {
+        jinja2::ValuesList valuesList;
+        for (auto& m : chat) {
+            std::string role = m["role"];
+            std::string prompt = m["content"];
+            jinja2::ValuesMap message {{"role", role}, {"content", prompt}};
+            valuesList.emplace_back(message);
+        }
+        jinja2::ValuesMap params = {
+            {"messages", valuesList},
+            {"bos_token",  m_bos_token},
+            {"eos_token", m_eos_token},
+            {"add_generation_prompt", true},
+        };
+        std::string text = m_processed_chat_template->RenderAsString(params).value();
+        return text;
+    }
 };
 
 Tokenizer::Tokenizer(const std::string& models_path) {
@@ -70,4 +122,8 @@ std::string Tokenizer::decode(std::vector<int64_t> tokens) {
 
 size_t Tokenizer::get_eos_token_id() const {
     return m_impl->get_eos_token_id();
+}
+
+std::string Tokenizer::apply_chat_template(chat_t chat) {
+    return m_impl->apply_chat_template(chat);
 }

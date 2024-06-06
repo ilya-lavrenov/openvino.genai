@@ -24,6 +24,10 @@ set(TARGET_NAME accuracy_sample)
 add_executable(${TARGET_NAME} ${TARGET_NAME}.cpp)
 target_link_libraries(${TARGET_NAME} PRIVATE openvino::continuous_batching cxxopts::cxxopts)
 
+set(TARGET_NAME chat_sample)
+add_executable(${TARGET_NAME} ${TARGET_NAME}.cpp)
+target_link_libraries(${TARGET_NAME} PRIVATE openvino::continuous_batching cxxopts::cxxopts)
+
 set(TARGET_NAME throughput_benchmark)
 add_executable(${TARGET_NAME} ${TARGET_NAME}.cpp)
 target_link_libraries(${TARGET_NAME} PRIVATE openvino::continuous_batching nlohmann_json::nlohmann_json cxxopts::cxxopts)
