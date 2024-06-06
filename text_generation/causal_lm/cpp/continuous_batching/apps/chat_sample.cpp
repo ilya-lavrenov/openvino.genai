@@ -7,12 +7,6 @@
 #include "continuous_batching_pipeline.hpp"
 #include "tokenizer.hpp"
 
-void print_generation_result(const GenerationResult& generation_result) {
-    for (size_t output_id = 0; output_id < generation_result.m_generation_ids.size(); ++output_id) {
-        std::cout << "Answer " << output_id << " (" << generation_result.m_scores[output_id] << ") : " << generation_result.m_generation_ids[output_id] << std::endl;
-    }
-}
-
 int main(int argc, char* argv[]) try {
     // Command line options
 
@@ -77,7 +71,7 @@ int main(int argc, char* argv[]) try {
     std::cout << std::endl;
 
     auto results = pipe.generate(std::vector<std::string>{prompt}, std::vector<GenerationConfig>{GenerationConfig::greedy()});
-    std::cout << "Model response: " << results[0].m_generation_ids[0];
+    std::cout << "Model response: " << results[0].m_generation_ids[0] << std::endl;
 
     // For now this sample is used to check template processing. 
     // Ultimately we could make it a full, interactive chat sample. 

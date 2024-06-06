@@ -54,9 +54,9 @@ public:
             models_path + "/openvino_detokenizer.xml", "CPU").create_infer_request();
 
         std::ifstream tokenizer_config(models_path + "/tokenizer_config.json");
+        OPENVINO_ASSERT(tokenizer_config.good(), "Failed to read tokenizer_config.json from the models path");
         nlohmann::json json_data = nlohmann::json::parse(tokenizer_config);
 
-        std::cout << "Read tokenizer config" << std::endl;
         m_bos_token = json_data.value("bos_token", "");
         m_eos_token = json_data.value("eos_token", "");
         m_chat_template = json_data.value("chat_template", "");
@@ -90,21 +90,29 @@ public:
     }
 
     std::string apply_chat_template(chat_t chat) {
-        jinja2::ValuesList valuesList;
-        for (auto& m : chat) {
-            std::string role = m["role"];
-            std::string prompt = m["content"];
-            jinja2::ValuesMap message {{"role", role}, {"content", prompt}};
-            valuesList.emplace_back(message);
+        try {
+            jinja2::ValuesList valuesList;
+            for (auto& m : chat) {
+                std::string role = m["role"];
+                std::string prompt = m["content"];
+                jinja2::ValuesMap message {{"role", role}, {"content", prompt}};
+                valuesList.emplace_back(message);
+            }
+            jinja2::ValuesMap params = {
+                {"messages", valuesList},
+                {"bos_token",  m_bos_token},
+                {"eos_token", m_eos_token},
+                {"add_generation_prompt", true},
+            };
+            std::string text = m_processed_chat_template->RenderAsString(params).value();
+            return text;
+        } catch (const std::exception& error) {
+            std::cerr << "Error during applying chat template: " << error.what() << std::endl;
+            throw;
+        } catch (...) {
+            std::cerr << "Unexpected error during applying chat template \n";
+            throw;
         }
-        jinja2::ValuesMap params = {
-            {"messages", valuesList},
-            {"bos_token",  m_bos_token},
-            {"eos_token", m_eos_token},
-            {"add_generation_prompt", true},
-        };
-        std::string text = m_processed_chat_template->RenderAsString(params).value();
-        return text;
     }
 };
 
