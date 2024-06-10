@@ -124,6 +124,11 @@ public:
         return std::make_unique<GenerationHandleImpl>(sequence_group->get_generation_stream(), sampling_params);
     }
 
+    GenerationHandle add_request(uint64_t request_id, chat_t chat, GenerationConfig sampling_params) {
+        std::string prompt = m_tokenizer->apply_chat_template(chat);
+        return add_request(request_id, prompt, sampling_params);
+    }
+
     void step() {
         static ManualTimer step_timer("step()");
         step_timer.start();
@@ -276,6 +281,10 @@ GenerationConfig ContinuousBatchingPipeline::get_config() const{
 
 GenerationHandle ContinuousBatchingPipeline::add_request(uint64_t request_id, std::string prompt, GenerationConfig sampling_params) {
     return m_impl->add_request(request_id, prompt, sampling_params);
+}
+
+GenerationHandle ContinuousBatchingPipeline::add_request(uint64_t request_id, chat_t chat, GenerationConfig sampling_params) {
+    return m_impl->add_request(request_id, chat, sampling_params);
 }
 
 void ContinuousBatchingPipeline::step() {

@@ -15,6 +15,18 @@ FetchContent_MakeAvailable(nlohmann_json)
 
 find_package(OpenVINO REQUIRED COMPONENTS Runtime)
 
+function(ov_genai_build_jinja2cpp)
+    FetchContent_Declare(jinja2cpp
+	    jinja2cpp
+    GIT_REPOSITORY https://github.com/jinja2cpp/Jinja2Cpp.git
+    GIT_TAG 9ae7e1fc45d707e1686dd425a154d30963801944
+    GIT_SUBMODULES_RECURSE ON)
+    FetchContent_GetProperties(jinja2cpp)
+    FetchContent_MakeAvailable(jinja2cpp)
+endfunction()
+
+ov_genai_build_jinja2cpp()
+
 # check that SDPA to PA transformtion exists
 get_target_property(ov_include_dirs openvino::runtime INTERFACE_INCLUDE_DIRECTORIES)
 find_file(spda_to_pa_header sdpa_to_paged_attention.hpp
@@ -39,9 +51,12 @@ add_library(openvino::continuous_batching ALIAS openvino_continuous_batching)
 target_include_directories(${TARGET_NAME} PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/src"
                                           PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/include")
 target_compile_definitions(${TARGET_NAME} PRIVATE OPENVINO_TOKENIZERS_PATH="libopenvino_tokenizers.so")
-set_target_properties(${TARGET_NAME} PROPERTIES CXX_STANDARD 14 CXX_STANDARD_REQUIRED ON)
+set_target_properties(${TARGET_NAME} PROPERTIES CXX_STANDARD 17 CXX_STANDARD_REQUIRED ON)
 
-target_link_libraries(${TARGET_NAME} PUBLIC openvino::runtime PRIVATE nlohmann_json::nlohmann_json)
+#need make_unique
+target_compile_features(${TARGET_NAME} PUBLIC cxx_std_17)
+
+target_link_libraries(${TARGET_NAME} PUBLIC openvino::runtime PRIVATE nlohmann_json::nlohmann_json jinja2cpp)
 
 #
 # Installation
