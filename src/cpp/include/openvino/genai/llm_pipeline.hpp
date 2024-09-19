@@ -90,9 +90,9 @@ public:
             return os;
         }
         for (size_t i = 0; i < dr.texts.size() - 1; ++i) {
-            os << dr.scores[i] << ": " << dr.texts[i] << '\n';
+            os << std::to_string(dr.scores[i]) << ": " << dr.texts[i] << '\n';
         }
-        return os << dr.scores.back() << ": " << dr.texts.back();
+        return os << std::to_string(dr.scores.back()) << ": " << dr.texts.back();
     }
 };
 
@@ -250,7 +250,7 @@ private:
     std::unique_ptr<LLMPipelineImplBase> m_pimpl;
 };
 
-std::pair<std::string, Any> streamer(StreamerVariant func);
+OPENVINO_GENAI_EXPORTS std::pair<std::string, Any> streamer(StreamerVariant func);
 std::pair<std::string, Any> generation_config(const GenerationConfig& config);
 
 }  // namespace genai
