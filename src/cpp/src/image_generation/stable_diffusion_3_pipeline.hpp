@@ -303,7 +303,7 @@ public:
         ov::Tensor text_encoder_1_output =
             m_clip_text_encoder_1->infer(positive_prompt,
                                          negative_prompt_1_str,
-                                         do_classifier_free_guidance(generation_config.guidance_scale));
+                                         false);
 
         // text_encoder_1_hidden_state - stores positive and negative prompt_embeds
         size_t idx_hidden_state_1 = m_clip_text_encoder_1->get_config().num_hidden_layers + 1;
@@ -313,20 +313,23 @@ public:
         ov::Tensor text_encoder_2_output =
             m_clip_text_encoder_2->infer(prompt_2_str,
                                          negative_prompt_2_str,
-                                         do_classifier_free_guidance(generation_config.guidance_scale));
+                                         false);
 
         // text_encoder_2_hidden_state - stores positive and negative prompt_2_embeds
         size_t idx_hidden_state_2 = m_clip_text_encoder_2->get_config().num_hidden_layers + 1;
         ov::Tensor text_encoder_2_hidden_state = m_clip_text_encoder_2->get_output_tensor(idx_hidden_state_2);
         // get positive prompt_2_embed_out
 
-        ov::Tensor pooled_prompt_embed_out, prompt_embed_out, pooled_prompt_2_embed_out, prompt_2_embed_out;
+        ov::Tensor pooled_prompt_embed_out(ov::element::f32, {}),
+            prompt_embed_out(ov::element::f32, {}),
+            pooled_prompt_2_embed_out(ov::element::f32, {}),
+            prompt_2_embed_out(ov::element::f32, {});
 
         if (do_classifier_free_guidance(generation_config.guidance_scale)) {
-            pooled_prompt_embed_out = split_2d_by_batch(text_encoder_1_output, 1);
-            prompt_embed_out = split_3d_by_batch(text_encoder_1_hidden_state, 1);
-            pooled_prompt_2_embed_out = split_2d_by_batch(text_encoder_2_output, 1);
-            prompt_2_embed_out = split_3d_by_batch(text_encoder_2_hidden_state, 1);
+            text_encoder_1_output.copy_to(pooled_prompt_embed_out);
+            text_encoder_1_hidden_state.copy_to(prompt_embed_out);
+            text_encoder_2_output.copy_to(pooled_prompt_2_embed_out);
+            text_encoder_2_hidden_state.copy_to(prompt_2_embed_out);
         } else {
             pooled_prompt_embed_out = text_encoder_1_output;
             prompt_embed_out = text_encoder_1_hidden_state;
@@ -412,12 +415,19 @@ public:
         // From steps above we'll use prompt_embeds and pooled_prompt_embeds tensors
 
         if (do_classifier_free_guidance(generation_config.guidance_scale)) {
+            text_encoder_1_output = m_clip_text_encoder_1->infer(negative_prompt_1_str, "", false);
+            text_encoder_1_hidden_state = m_clip_text_encoder_1->get_output_tensor(idx_hidden_state_1);
+
+            // text_encoder_2_output - stores positive and negative pooled_prompt_2_embeds
+            text_encoder_2_output = m_clip_text_encoder_2->infer(negative_prompt_2_str, "", false);
+            text_encoder_2_hidden_state = m_clip_text_encoder_2->get_output_tensor(idx_hidden_state_2);
+
             // 2. Encode negative prompt:
 
-            ov::Tensor negative_pooled_prompt_embed_out = split_2d_by_batch(text_encoder_1_output, 0);
-            ov::Tensor negative_prompt_embed_out = split_3d_by_batch(text_encoder_1_hidden_state, 0);
-            ov::Tensor negative_pooled_prompt_2_embed_out = split_2d_by_batch(text_encoder_2_output, 0);
-            ov::Tensor negative_prompt_2_embed_out = split_3d_by_batch(text_encoder_2_hidden_state, 0);
+            ov::Tensor negative_pooled_prompt_embed_out = text_encoder_1_output;
+            ov::Tensor negative_prompt_embed_out = text_encoder_1_hidden_state;
+            ov::Tensor negative_pooled_prompt_2_embed_out = text_encoder_2_output;
+            ov::Tensor negative_prompt_2_embed_out = text_encoder_2_hidden_state;
 
             ov::Tensor negative_pooled_prompt_embed, negative_prompt_embed, negative_pooled_prompt_2_embed,
                 negative_prompt_2_embed;
@@ -544,12 +554,35 @@ public:
         m_scheduler->set_timesteps(generation_config.num_inference_steps, generation_config.strength);
         std::vector<float> timesteps = m_scheduler->get_float_timesteps();
 
+        auto read_tensor = [] (std::string filename, ov::Tensor tensor, bool assign = false) {
+            std::cout << "Reading " << filename << std::endl;
+            std::cout << "tensor shape " << tensor.get_shape() << std::endl;
+
+            std::ifstream file(filename);
+            for (size_t i = 0, diff = 0; i < tensor.get_size(); ++i) {
+                float value;
+                file >> value;
+                if (assign)
+                    tensor.data<float>()[i] = value;
+                if (std::fabs(tensor.data<float>()[i] - value) > 1e-6 && diff < 10) {
+                    std::cout << i << " " << value << " " << tensor.data<float>()[i] << std::endl;
+                    ++diff;
+                }
+            }
+            std::cout << "End of reading " << filename << std::endl;
+        };
+
+        read_tensor("/home/devuser/ilavreno/openvino.genai/prompt_embeds.txt", prompt_embeds_inp);
+        read_tensor("/home/devuser/ilavreno/openvino.genai/pooled_prompt_embeds.txt", pooled_prompt_embeds_inp);
+
         // 4. Set model inputs
         m_transformer->set_hidden_states("encoder_hidden_states", prompt_embeds_inp);
         m_transformer->set_hidden_states("pooled_projections", pooled_prompt_embeds_inp);
 
         // 5. Prepare latent variables
         ov::Tensor latent = prepare_latents(initial_image, generation_config);
+        
+        read_tensor("/home/devuser/ilavreno/openvino.genai/latents.txt", latent);
 
         ov::Shape latent_shape_cfg = latent.get_shape();
         latent_shape_cfg[0] *= batch_size_multiplier;
@@ -557,28 +590,39 @@ public:
 
         // 6. Denoising loop
         ov::Tensor noisy_residual_tensor(ov::element::f32, {});
-        ov::Tensor timestep;
 
         for (size_t inference_step = 0; inference_step < generation_config.num_inference_steps; ++inference_step) {
             // concat the same latent twice along a batch dimension in case of CFG
             if (batch_size_multiplier > 1) {
                 batch_copy(latent, latent_cfg, 0, 0, generation_config.num_images_per_prompt);
-                batch_copy(latent,
-                           latent_cfg,
-                           0,
-                           generation_config.num_images_per_prompt,
-                           generation_config.num_images_per_prompt);
-
-                size_t timestep_size = generation_config.num_images_per_prompt * batch_size_multiplier;
-                timestep = ov::Tensor(ov::element::f32, {timestep_size});
-                std::fill_n(timestep.data<float>(), timestep.get_size(), timesteps[inference_step]);
+                batch_copy(latent, latent_cfg, 0, generation_config.num_images_per_prompt, generation_config.num_images_per_prompt);
             } else {
                 // just assign to save memory copy
                 latent_cfg = latent;
-                timestep = ov::Tensor(ov::element::f32, {1}, &timesteps[inference_step]);
+            }
+
+            ov::Tensor timestep(ov::element::f32, {generation_config.num_images_per_prompt * batch_size_multiplier});
+            std::fill_n(timestep.data<float>(), timestep.get_size(), timesteps[inference_step]);
+
+            {
+                std::stringstream stream;
+                stream << "/home/devuser/ilavreno/openvino.genai/timestep_" << inference_step << ".txt";
+                read_tensor(stream.str(), timestep);
+            }
+            
+            {
+                std::stringstream stream;
+                stream << "/home/devuser/ilavreno/openvino.genai/latent_cfg_" << inference_step << ".txt";
+                read_tensor(stream.str(), latent_cfg);
             }
 
             ov::Tensor noise_pred_tensor = m_transformer->infer(latent_cfg, timestep);
+
+            {
+                std::stringstream stream;
+                stream << "/home/devuser/ilavreno/openvino.genai/noise_pred_raw_" << inference_step << ".txt";
+                read_tensor(stream.str(), noise_pred_tensor, true);
+            }
 
             ov::Shape noise_pred_shape = noise_pred_tensor.get_shape();
             noise_pred_shape[0] /= batch_size_multiplier;
@@ -599,14 +643,20 @@ public:
                 noisy_residual_tensor = noise_pred_tensor;
             }
 
+            {
+                std::stringstream stream;
+                stream << "/home/devuser/ilavreno/openvino.genai/noise_pred_" << inference_step << ".txt";
+                read_tensor(stream.str(), noisy_residual_tensor);
+            }
+
             auto scheduler_step_result = m_scheduler->step(noisy_residual_tensor, latent, inference_step, generation_config.generator);
             latent = scheduler_step_result["latent"];
-        }
 
-        float* latent_data = latent.data<float>();
-        for (size_t i = 0; i < latent.get_size(); ++i) {
-            latent_data[i] = (latent_data[i] / m_vae->get_config().scaling_factor) +
-                             m_vae->get_config().shift_factor;
+            {
+                std::stringstream stream;
+                stream << "/home/devuser/ilavreno/openvino.genai/latents_" << inference_step << ".txt";
+                read_tensor(stream.str(), latent);
+            }
         }
 
         return m_vae->decode(latent);
