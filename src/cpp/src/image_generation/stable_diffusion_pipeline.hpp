@@ -19,9 +19,9 @@
 #include "openvino/runtime/core.hpp"
 
 #include "json_utils.hpp"
-#include "lora_helper.hpp"
 #include "debug_utils.hpp"
 #include "numpy_utils.hpp"
+#include "utils.hpp"
 
 namespace ov {
 namespace genai {
@@ -88,7 +88,7 @@ public:
         initialize_generation_config(data["_class_name"].get<std::string>());
     }
 
-    StableDiffusionPipeline(PipelineType pipeline_type, const std::filesystem::path& root_dir, const std::string& device, const ov::AnyMap& properties) :
+    StableDiffusionPipeline(PipelineType pipeline_type, const std::filesystem::path& root_dir, const std::string& device, ov::AnyMap properties) :
         StableDiffusionPipeline(pipeline_type) {
         const std::filesystem::path model_index_path = root_dir / "model_index.json";
         std::ifstream file(model_index_path);
@@ -97,7 +97,9 @@ public:
         nlohmann::json data = nlohmann::json::parse(file);
         using utils::read_json_param;
 
-        set_scheduler(Scheduler::from_config(root_dir / "scheduler/scheduler_config.json"));
+        m_scheduler = utils::pop_or_default(properties, scheduler.name(), m_scheduler);
+        if (!m_scheduler)
+            set_scheduler(Scheduler::from_config(root_dir / "scheduler/scheduler_config.json"));
 
         const std::string text_encoder = data["text_encoder"][1].get<std::string>();
         if (text_encoder == "CLIPTextModel") {

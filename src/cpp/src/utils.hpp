@@ -22,6 +22,38 @@ constexpr bool is_container<T,
     std::void_t<decltype(std::declval<T>().begin()),
                 decltype(std::declval<T>().end())>> = true;
 
+std::optional<ov::Any> pop_option(ov::AnyMap& properties, const std::string& option_name) {
+    if (auto it = properties.find(option_name); it != properties.end()) {
+        std::optional<ov::Any> found = std::make_optional(it->second);
+        properties.erase(it);
+        return found;
+    }
+    return std::nullopt;
+}
+
+template <typename T>
+std::optional<T> get_option(ov::AnyMap& config, const std::string& option_name) {
+    if (auto it = config.find(option_name); it != config.end()) {
+        return std::make_optional(it->second.as<T>());
+    }
+    return std::nullopt;
+}
+
+template <typename T>
+T pop_or_default(ov::AnyMap& config, const std::string& key, const T& default_value) {
+    auto anyopt = pop_option(config, key);
+    if (anyopt.has_value()) {
+        if (anyopt.value().empty()) {
+            if (ov::genai::utils::is_container<T>)
+                return T{};
+            else {
+                OPENVINO_THROW("Got empty ov::Any for key: " + key);
+            }
+        }
+        return anyopt.value().as<T>();
+    }
+    return default_value;
+}
 
 Tensor init_attention_mask(const Tensor& position_ids);
 

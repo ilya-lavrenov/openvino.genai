@@ -27,6 +27,10 @@
 #include "json_utils.hpp"
 #include "utils.hpp"
 
+using ov::genai::utils::pop_option;
+using ov::genai::utils::get_option;
+using ov::genai::utils::pop_or_default;
+
 namespace {
 
 namespace opp = ov::pass::pattern;
@@ -304,23 +308,6 @@ bool is_cw_compressed(const std::shared_ptr<ov::Model>& model) {
     return false;
 }
 
-std::optional<ov::Any> pop_option(ov::AnyMap& config, const std::string& option_name) {
-    if (auto it = config.find(option_name); it != config.end()) {
-        std::optional<ov::Any> found = std::make_optional(it->second);
-        config.erase(it);
-        return found;
-    }
-    return std::nullopt;
-}
-
-template <typename T>
-std::optional<T> get_option(ov::AnyMap& config, const std::string& option_name) {
-    if (auto it = config.find(option_name); it != config.end()) {
-        return std::make_optional(it->second.as<T>());
-    }
-    return std::nullopt;
-}
-
 std::shared_ptr<ov::Model> redirect_new_kv_to_output(const std::shared_ptr<ov::Model>& model) {
     const auto kStartOutputKVCacheLayers = 1u;
     for (int i = kStartOutputKVCacheLayers; i < model->outputs().size(); ++i) {
@@ -552,22 +539,6 @@ ov::AnyMap get_default_generate_config(const std::shared_ptr<ov::Model>& model,
         config.emplace("NPUW_DQ_FULL", "NO");
     }
     return config;
-}
-
-template <typename T>
-T pop_or_default(ov::AnyMap& config, const std::string& key, const T& default_value) {
-    auto anyopt = pop_option(config, key);
-    if (anyopt.has_value()) {
-        if (anyopt.value().empty()) {
-            if (ov::genai::utils::is_container<T>)
-                return T{};
-            else {
-                OPENVINO_THROW("Got empty ov::Any for key: " + key);
-            }
-        }
-        return anyopt.value().as<T>();
-    }
-    return default_value;
 }
 
 std::optional<uint32_t> pop_int_and_cast(ov::AnyMap& config, const std::string& key) {

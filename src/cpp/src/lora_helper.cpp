@@ -27,5 +27,5 @@ bool update_adapters_from_properties (const AnyMap& properties, std::optional<Ad
     return false;
 }
 
-}
-}
+} // namespace genai
+} // namespace ov
