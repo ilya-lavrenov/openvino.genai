@@ -1,14 +1,13 @@
 #include "lora_helper.hpp"
 
-
 namespace ov {
 namespace genai {
 
-
-std::optional<AnyMap> extract_adapters_from_properties (const AnyMap& properties, std::optional<AdapterConfig>* adapter_config) {
+std::optional<AnyMap> extract_adapters_from_properties(const AnyMap& properties,
+                                                       std::optional<AdapterConfig>* adapter_config) {
     auto adapters_iter = properties.find(AdaptersProperty::name());
     if (adapters_iter != properties.end()) {
-        if(adapter_config) {
+        if (adapter_config) {
             *adapter_config = adapters_iter->second.as<AdapterConfig>();
         }
         auto filtered_properties = properties;
@@ -18,7 +17,7 @@ std::optional<AnyMap> extract_adapters_from_properties (const AnyMap& properties
     return std::nullopt;
 }
 
-bool update_adapters_from_properties (const AnyMap& properties, std::optional<AdapterConfig>& adapter_config) {
+bool update_adapters_from_properties(const AnyMap& properties, std::optional<AdapterConfig>& adapter_config) {
     auto adapters_iter = properties.find(AdaptersProperty::name());
     if (adapters_iter != properties.end()) {
         adapter_config = adapters_iter->second.as<AdapterConfig>();
@@ -27,5 +26,5 @@ bool update_adapters_from_properties (const AnyMap& properties, std::optional<Ad
     return false;
 }
 
-}
-}
+}  // namespace genai
+}  // namespace ov

@@ -1,13 +1,12 @@
 // Copyright (C) 2023-2024 Intel Corporation
 // SPDX-License-Identifier: Apache-2.0
 
+#include <cassert>
 #include <openvino/runtime/tensor.hpp>
 
-#include <cassert>
-
+#include "lm_encoding.hpp"
 #include "openvino/genai/llm_pipeline.hpp"
 #include "utils.hpp"
-#include "lm_encoding.hpp"
 
 namespace {
 
@@ -327,17 +326,17 @@ namespace ov {
 namespace genai {
 
 std::pair<EncodedResults, int32_t> beam_search(ov::InferRequest& lm,
-                           ov::Tensor input_ids,
-                           ov::Tensor attention_mask,
-                           GenerationConfig config, 
-                           std::optional<ov::Tensor> position_ids,
-                           std::optional<int32_t> selected_beam_idx) {
+                                               ov::Tensor input_ids,
+                                               ov::Tensor attention_mask,
+                                               GenerationConfig config,
+                                               std::optional<ov::Tensor> position_ids,
+                                               std::optional<int32_t> selected_beam_idx) {
     OPENVINO_ASSERT(config.num_beams % config.num_beam_groups == 0,
                     "number of beams should be divisible by number of groups");
-    
+
     auto batch_size = input_ids.get_shape().at(0);
     auto sequence_length = input_ids.get_shape().at(1);
-    
+
     // Initialize beam search.
     const int64_t* prompt_data = input_ids.data<const int64_t>();
     std::vector<std::vector<int64_t>> prompts;
@@ -381,7 +380,7 @@ std::pair<EncodedResults, int32_t> beam_search(ov::InferRequest& lm,
     new_token_times.reserve(parameters.max_new_tokens);
     batch_sizes.reserve(parameters.max_new_tokens);
 
-    for (size_t length_count = 0; ; ++length_count) {
+    for (size_t length_count = 0;; ++length_count) {
         lm.infer();
 
         std::tie(next_tokens, next_beams) = group_beam_searcher.select_next_tokens(lm.get_tensor("logits"));
@@ -393,7 +392,7 @@ std::pair<EncodedResults, int32_t> beam_search(ov::InferRequest& lm,
             // If generation is continued, attention_mask length should be equal to KV cache size.
             break;
         }
-        
+
         size_t running_batch_size = next_tokens.size();
         // Set pointers
         lm.set_tensor("input_ids", ov::Tensor{ov::element::i64, {running_batch_size, 1}, next_tokens.data()});
@@ -419,7 +418,7 @@ std::pair<EncodedResults, int32_t> beam_search(ov::InferRequest& lm,
     auto& raw_perf_counters = results.perf_metrics.raw_metrics;
     raw_perf_counters.m_new_token_times = new_token_times;
     raw_perf_counters.m_batch_sizes = batch_sizes;
-    
+
     // align output with HF
     for (size_t prompt_id = 0; prompt_id < result.size(); prompt_id++) {
         auto prompt_group = result.at(prompt_id);
@@ -431,23 +430,17 @@ std::pair<EncodedResults, int32_t> beam_search(ov::InferRequest& lm,
             }
         }
         assert(config.num_return_sequences <= plain_beams.size());
-        std::partial_sort(
-            plain_beams.begin(),
-            plain_beams.begin() + config.num_return_sequences,
-            plain_beams.end(),
-            scores_comparator
-        );
+        std::partial_sort(plain_beams.begin(),
+                          plain_beams.begin() + config.num_return_sequences,
+                          plain_beams.end(),
+                          scores_comparator);
         res_selected_beam_idx = plain_beams.at(0).get().global_beam_idx;
-        for (
-            auto beam = plain_beams.begin();
-            beam != plain_beams.begin() + config.num_return_sequences;
-            ++beam
-        ) {
+        for (auto beam = plain_beams.begin(); beam != plain_beams.begin() + config.num_return_sequences; ++beam) {
             results.scores.push_back(beam->get().score);
             results.tokens.push_back(std::move(beam->get().tokens));
         }
     }
-    
+
     return {results, res_selected_beam_idx};
 }
 

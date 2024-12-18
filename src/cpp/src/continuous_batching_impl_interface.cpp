@@ -29,8 +29,7 @@ void ContinuousBatchingPipeline::ImplInterface::finish_chat() {
     m_history.clear();
 };
 
-std::vector<GenerationResult>
-ContinuousBatchingPipeline::ImplInterface::generate(
+std::vector<GenerationResult> ContinuousBatchingPipeline::ImplInterface::generate(
     const std::vector<std::string>& prompts,
     std::vector<ov::genai::GenerationConfig> sampling_params,
     const StreamerVariant& streamer) {
@@ -65,13 +64,9 @@ ContinuousBatchingPipeline::ImplInterface::generate(
                 m_history.push_back({{"role", "assistant"}, {"content", generated.back()}});
             }
         }
-        decoded.push_back(GenerationResult{
-            res.m_request_id,
-            std::move(generated),
-            std::move(res.m_scores),
-            res.m_status
-        });
+        decoded.push_back(
+            GenerationResult{res.m_request_id, std::move(generated), std::move(res.m_scores), res.m_status});
     }
     return decoded;
 }
-}
+}  // namespace ov::genai

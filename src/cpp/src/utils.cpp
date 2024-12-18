@@ -7,12 +7,11 @@
 
 #include "openvino/op/add.hpp"
 #include "openvino/op/divide.hpp"
-#include "openvino/op/multiply.hpp"
 #include "openvino/op/matmul.hpp"
+#include "openvino/op/multiply.hpp"
 #include "openvino/op/slice.hpp"
 #include "openvino/op/tanh.hpp"
 #include "openvino/op/transpose.hpp"
-
 #include "sampler.hpp"
 
 namespace ov {
@@ -184,13 +183,9 @@ ov::genai::OptionalGenerationConfig get_config_from_map(const ov::AnyMap& config
         return std::nullopt;
 }
 
-ProcessorConfig from_any_map(
-    const ov::AnyMap& config_map,
-    const ProcessorConfig& initial
-) {
+ProcessorConfig from_any_map(const ov::AnyMap& config_map, const ProcessorConfig& initial) {
     auto iter = config_map.find("processor_config");
-    ProcessorConfig extracted_config = config_map.end() != iter ?
-        iter->second.as<ProcessorConfig>() : initial;
+    ProcessorConfig extracted_config = config_map.end() != iter ? iter->second.as<ProcessorConfig>() : initial;
     using utils::read_anymap_param;
     read_anymap_param(config_map, "patch_size", extracted_config.patch_size);
     read_anymap_param(config_map, "scale_resolution", extracted_config.scale_resolution);
@@ -222,7 +217,7 @@ std::pair<ov::AnyMap, ov::AnyMap> split_core_compile_config(const ov::AnyMap& pr
 };
 
 /**
- * scheduler_config is a separate config for continuous batching pipeline. 
+ * scheduler_config is a separate config for continuous batching pipeline.
  * This routine splits scheduler_config from plugin_config.
  */
 std::pair<ov::AnyMap, SchedulerConfig> split_scheduler_config(const ov::AnyMap& properties) {
@@ -236,7 +231,8 @@ std::pair<ov::AnyMap, SchedulerConfig> split_scheduler_config(const ov::AnyMap& 
     return {plugin_config, scheduler_config};
 };
 
-std::shared_ptr<ov::Model> read_model_with_config(const std::filesystem::path& models_path, const ov::AnyMap& properties) {
+std::shared_ptr<ov::Model> read_model_with_config(const std::filesystem::path& models_path,
+                                                  const ov::AnyMap& properties) {
     auto [core_properties, compile_properties] = split_core_compile_config(properties);
     ov::Core core;
     core.set_property(core_properties);
@@ -244,7 +240,8 @@ std::shared_ptr<ov::Model> read_model_with_config(const std::filesystem::path& m
     return core.read_model((models_path / openvino_model_name).string());
 }
 
-ov::genai::TokenizedInputs subtract_chat_tokenized_inputs(const ov::genai::TokenizedInputs& minuend, const ov::genai::TokenizedInputs& subtrahend) {
+ov::genai::TokenizedInputs subtract_chat_tokenized_inputs(const ov::genai::TokenizedInputs& minuend,
+                                                          const ov::genai::TokenizedInputs& subtrahend) {
     auto minuend_size = minuend.input_ids.get_size();
     auto subtrahend_size = subtrahend.input_ids.get_size();
     ov::Shape new_shape{1, minuend_size - subtrahend_size};
@@ -264,7 +261,7 @@ void slice_matmul_statefull_model(std::shared_ptr<ov::Model> model) {
     ov::Node* matmul = dynamic_cast<ov::op::v0::MatMul*>(last_node);
     if (matmul) {
         // we have found matmul, do nothing
-    } else if(auto add = dynamic_cast<ov::op::v1::Add*>(last_node)) {
+    } else if (auto add = dynamic_cast<ov::op::v1::Add*>(last_node)) {
         matmul = dynamic_cast<ov::op::v0::MatMul*>(add->input_value(0).get_node());
     } else if (auto transpose = dynamic_cast<ov::op::v1::Transpose*>(last_node)) {
         matmul = dynamic_cast<ov::op::v0::MatMul*>(transpose->input_value(0).get_node());
@@ -300,18 +297,20 @@ void read_rt_info(std::shared_ptr<ov::Model>& model, const char* name, T& value)
     }
 }
 
-template void read_rt_info<int64_t>(std::shared_ptr<ov::Model>&,  const char*, int64_t&);
-template void read_rt_info<std::string>(std::shared_ptr<ov::Model>&,  const char*, std::string&);
+template void read_rt_info<int64_t>(std::shared_ptr<ov::Model>&, const char*, int64_t&);
+template void read_rt_info<std::string>(std::shared_ptr<ov::Model>&, const char*, std::string&);
 
 ov::Core singleton_core() {
     static ov::Core core;
     return core;
 }
 
-size_t get_first_history_difference(const ov::Tensor& encoded_history, const std::vector<int64_t> tokenized_history, std::set<int64_t> stop_tokens) {
+size_t get_first_history_difference(const ov::Tensor& encoded_history,
+                                    const std::vector<int64_t> tokenized_history,
+                                    std::set<int64_t> stop_tokens) {
     size_t idx = 0;
     auto encoded_history_data = encoded_history.data<int64_t>();
-    while(idx < encoded_history.get_size() && idx < tokenized_history.size()) {
+    while (idx < encoded_history.get_size() && idx < tokenized_history.size()) {
         if (encoded_history_data[idx] != tokenized_history[idx])
             break;
         idx++;
@@ -319,7 +318,8 @@ size_t get_first_history_difference(const ov::Tensor& encoded_history, const std
 
     // encoded_history after decode of tokenizer could lose one last token (eos/stop token)
     if ((idx == tokenized_history.size() && idx == encoded_history.get_size()) ||
-        (encoded_history.get_size() < tokenized_history.size() && idx == tokenized_history.size() - 1 && stop_tokens.find(tokenized_history.back()) != stop_tokens.end()))
+        (encoded_history.get_size() < tokenized_history.size() && idx == tokenized_history.size() - 1 &&
+         stop_tokens.find(tokenized_history.back()) != stop_tokens.end()))
         return SIZE_MAX;
     else
         return idx;
@@ -354,14 +354,17 @@ size_t get_seq_len_axis(std::shared_ptr<const ov::Model> model) {
     return seq_length_axis;
 }
 
-void trim_kv_cache(ov::InferRequest request, uint64_t remove_from_end, size_t seq_length_axis, std::optional<AdapterController> adapter_controller) {
+void trim_kv_cache(ov::InferRequest request,
+                   uint64_t remove_from_end,
+                   size_t seq_length_axis,
+                   std::optional<AdapterController> adapter_controller) {
     // nothing to trim in this case
     if (remove_from_end == 0)
         return;
 
     auto states = request.query_state();
     for (auto& state : states) {
-        if(adapter_controller && adapter_controller->has_state_name(state.get_name()))
+        if (adapter_controller && adapter_controller->has_state_name(state.get_name()))
             continue;
 
         ov::Tensor old_tensor = state.get_state();

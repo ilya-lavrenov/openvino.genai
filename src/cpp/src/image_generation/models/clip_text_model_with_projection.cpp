@@ -5,8 +5,8 @@
 
 #include <fstream>
 
-#include "lora_helper.hpp"
 #include "json_utils.hpp"
+#include "lora_helper.hpp"
 #include "utils.hpp"
 
 namespace ov {
@@ -25,25 +25,26 @@ CLIPTextModelWithProjection::Config::Config(const std::filesystem::path& config_
     read_json_param(data, "num_hidden_layers", num_hidden_layers);
 }
 
-CLIPTextModelWithProjection::CLIPTextModelWithProjection(const std::filesystem::path& root_dir) :
-    m_clip_tokenizer(get_tokenizer_path_by_text_encoder(root_dir)),
-    m_config(root_dir / "config.json") {
+CLIPTextModelWithProjection::CLIPTextModelWithProjection(const std::filesystem::path& root_dir)
+    : m_clip_tokenizer(get_tokenizer_path_by_text_encoder(root_dir)),
+      m_config(root_dir / "config.json") {
     ov::Core core = utils::singleton_core();
     m_model = core.read_model((root_dir / "openvino_model.xml").string());
 }
 
 CLIPTextModelWithProjection::CLIPTextModelWithProjection(const std::filesystem::path& root_dir,
-                const std::string& device,
-                const ov::AnyMap& properties) :
-    CLIPTextModelWithProjection(root_dir) {
+                                                         const std::string& device,
+                                                         const ov::AnyMap& properties)
+    : CLIPTextModelWithProjection(root_dir) {
     compile(device, properties);
 }
 
 CLIPTextModelWithProjection::CLIPTextModelWithProjection(const std::string& model,
                                                          const Tensor& weights,
                                                          const Config& config,
-                                                         const Tokenizer& clip_tokenizer) :
-    m_clip_tokenizer(clip_tokenizer), m_config(config) {
+                                                         const Tokenizer& clip_tokenizer)
+    : m_clip_tokenizer(clip_tokenizer),
+      m_config(config) {
     ov::Core core = utils::singleton_core();
     m_model = core.read_model(model, weights);
 }
@@ -53,8 +54,8 @@ CLIPTextModelWithProjection::CLIPTextModelWithProjection(const std::string& mode
                                                          const Config& config,
                                                          const Tokenizer& clip_tokenizer,
                                                          const std::string& device,
-                                                         const ov::AnyMap& properties) :
-    CLIPTextModelWithProjection(model, weights, config, clip_tokenizer) {
+                                                         const ov::AnyMap& properties)
+    : CLIPTextModelWithProjection(model, weights, config, clip_tokenizer) {
     compile(device, properties);
 }
 
@@ -76,7 +77,8 @@ CLIPTextModelWithProjection& CLIPTextModelWithProjection::reshape(int batch_size
     return *this;
 }
 
-CLIPTextModelWithProjection& CLIPTextModelWithProjection::compile(const std::string& device, const ov::AnyMap& properties) {
+CLIPTextModelWithProjection& CLIPTextModelWithProjection::compile(const std::string& device,
+                                                                  const ov::AnyMap& properties) {
     OPENVINO_ASSERT(m_model, "Model has been already compiled. Cannot re-compile already compiled model");
     ov::Core core = utils::singleton_core();
     ov::CompiledModel compiled_model;
@@ -102,7 +104,9 @@ void CLIPTextModelWithProjection::set_adapters(const std::optional<AdapterConfig
     }
 }
 
-ov::Tensor CLIPTextModelWithProjection::infer(const std::string& pos_prompt, const std::string& neg_prompt, bool do_classifier_free_guidance) {
+ov::Tensor CLIPTextModelWithProjection::infer(const std::string& pos_prompt,
+                                              const std::string& neg_prompt,
+                                              bool do_classifier_free_guidance) {
     OPENVINO_ASSERT(m_request, "CLIP text encoder model must be compiled first. Cannot infer non-compiled model");
 
     const int32_t pad_token_id = m_clip_tokenizer.get_pad_token_id();
@@ -119,17 +123,17 @@ ov::Tensor CLIPTextModelWithProjection::infer(const std::string& pos_prompt, con
     size_t current_batch_idx = 0;
 
     if (do_classifier_free_guidance) {
-        perform_tokenization(neg_prompt,
-                             ov::Tensor(input_ids, {current_batch_idx    , 0},
-                                                   {current_batch_idx + 1, m_config.max_position_embeddings}));
+        perform_tokenization(
+            neg_prompt,
+            ov::Tensor(input_ids, {current_batch_idx, 0}, {current_batch_idx + 1, m_config.max_position_embeddings}));
         ++current_batch_idx;
     } else {
         // Negative prompt is ignored when --guidanceScale < 1.0
     }
 
-    perform_tokenization(pos_prompt,
-                         ov::Tensor(input_ids, {current_batch_idx    , 0},
-                                               {current_batch_idx + 1, m_config.max_position_embeddings}));
+    perform_tokenization(
+        pos_prompt,
+        ov::Tensor(input_ids, {current_batch_idx, 0}, {current_batch_idx + 1, m_config.max_position_embeddings}));
 
     // text embeddings
     m_request.set_tensor("input_ids", input_ids);
@@ -142,5 +146,5 @@ ov::Tensor CLIPTextModelWithProjection::get_output_tensor(const size_t idx) {
     return m_request.get_output_tensor(idx);
 }
 
-} // namespace genai
-} // namespace ov
+}  // namespace genai
+}  // namespace ov

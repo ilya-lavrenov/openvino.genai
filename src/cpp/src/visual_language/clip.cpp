@@ -4,6 +4,7 @@
 // Based on clip.cpp
 
 #include "clip.hpp"
+
 #include <cmath>
 
 // Linear interpolation between two points
@@ -30,28 +31,24 @@ static void bilinear_resize(const clip_image_u8& src, clip_image_u8& dst, int ta
             float y_lerp = py - y_floor;
 
             for (int c = 0; c < 3; c++) {
-                float top = clip_lerp(
-                    static_cast<float>(src.buf[3 * (y_floor * src.nx + x_floor) + c]),
-                    static_cast<float>(src.buf[3 * (y_floor * src.nx + (x_floor + 1)) + c]),
-                    x_lerp
-                );
-                float bottom = clip_lerp(
-                    static_cast<float>(src.buf[3 * ((y_floor + 1) * src.nx + x_floor) + c]),
-                    static_cast<float>(src.buf[3 * ((y_floor + 1) * src.nx + (x_floor + 1)) + c]),
-                    x_lerp
-                );
+                float top = clip_lerp(static_cast<float>(src.buf[3 * (y_floor * src.nx + x_floor) + c]),
+                                      static_cast<float>(src.buf[3 * (y_floor * src.nx + (x_floor + 1)) + c]),
+                                      x_lerp);
+                float bottom = clip_lerp(static_cast<float>(src.buf[3 * ((y_floor + 1) * src.nx + x_floor) + c]),
+                                         static_cast<float>(src.buf[3 * ((y_floor + 1) * src.nx + (x_floor + 1)) + c]),
+                                         x_lerp);
                 dst.buf[3 * (y * target_width + x) + c] = static_cast<uint8_t>(clip_lerp(top, bottom, y_lerp));
             }
         }
     }
 }
 
-template<typename NUM>
+template <typename NUM>
 NUM clip(NUM x, NUM lower, NUM upper) {
     return std::max(lower, std::min(x, upper));
 }
 
-void bicubic_resize(const clip_image_u8 &img, clip_image_u8 &dst, int target_width, int target_height) {
+void bicubic_resize(const clip_image_u8& img, clip_image_u8& dst, int target_width, int target_height) {
     const int nx = img.nx;
     const int ny = img.ny;
 
@@ -84,14 +81,17 @@ void bicubic_resize(const clip_image_u8 &img, clip_image_u8 &dst, int target_wid
 
             for (k = 0; k < 3; k++) {
                 for (jj = 0; jj <= 3; jj++) {
-                    d0 = img.buf[(clip(y - 1 + jj, 0, ny - 1) * nx + clip(x - 1, 0, nx - 1)) * 3 + k] - img.buf[(clip(y - 1 + jj, 0, ny - 1) * nx + clip(x, 0, nx - 1)) * 3 + k];
-                    d2 = img.buf[(clip(y - 1 + jj, 0, ny - 1) * nx + clip(x + 1, 0, nx - 1)) * 3 + k] - img.buf[(clip(y - 1 + jj, 0, ny - 1) * nx + clip(x, 0, nx - 1)) * 3 + k];
-                    d3 = img.buf[(clip(y - 1 + jj, 0, ny - 1) * nx + clip(x + 2, 0, nx - 1)) * 3 + k] - img.buf[(clip(y - 1 + jj, 0, ny - 1) * nx + clip(x, 0, nx - 1)) * 3 + k];
+                    d0 = img.buf[(clip(y - 1 + jj, 0, ny - 1) * nx + clip(x - 1, 0, nx - 1)) * 3 + k] -
+                         img.buf[(clip(y - 1 + jj, 0, ny - 1) * nx + clip(x, 0, nx - 1)) * 3 + k];
+                    d2 = img.buf[(clip(y - 1 + jj, 0, ny - 1) * nx + clip(x + 1, 0, nx - 1)) * 3 + k] -
+                         img.buf[(clip(y - 1 + jj, 0, ny - 1) * nx + clip(x, 0, nx - 1)) * 3 + k];
+                    d3 = img.buf[(clip(y - 1 + jj, 0, ny - 1) * nx + clip(x + 2, 0, nx - 1)) * 3 + k] -
+                         img.buf[(clip(y - 1 + jj, 0, ny - 1) * nx + clip(x, 0, nx - 1)) * 3 + k];
                     a0 = img.buf[(clip(y - 1 + jj, 0, ny - 1) * nx + clip(x, 0, nx - 1)) * 3 + k];
 
                     a1 = -1.0 / 3 * d0 + d2 - 1.0 / 6 * d3;
-                    a2 =  1.0 / 2 * d0 +      1.0 / 2 * d2;
-                    a3 = -1.0 / 6 * d0 -      1.0 / 2 * d2 + 1.0 / 6 * d3;
+                    a2 = 1.0 / 2 * d0 + 1.0 / 2 * d2;
+                    a3 = -1.0 / 6 * d0 - 1.0 / 2 * d2 + 1.0 / 6 * d3;
 
                     C[jj] = a0 + a1 * dx + a2 * dx * dx + a3 * dx * dx * dx;
 
@@ -100,8 +100,8 @@ void bicubic_resize(const clip_image_u8 &img, clip_image_u8 &dst, int target_wid
                     d3 = C[3] - C[1];
                     a0 = C[1];
                     a1 = -1.0 / 3 * d0 + d2 - 1.0 / 6 * d3;
-                    a2 =  1.0 / 2 * d0 +      1.0 / 2 * d2;
-                    a3 = -1.0 / 6 * d0 -      1.0 / 2 * d2 + 1.0 / 6 * d3;
+                    a2 = 1.0 / 2 * d0 + 1.0 / 2 * d2;
+                    a3 = -1.0 / 6 * d0 - 1.0 / 2 * d2 + 1.0 / 6 * d3;
                     Cc = a0 + a1 * dy + a2 * dy * dy + a3 * dy * dy * dy;
 
                     const uint8_t Cc2 = std::min(std::max(std::round(Cc), 0.0f), 255.0f);
@@ -136,7 +136,7 @@ static clip_image_u8 resize_and_pad_image(const clip_image_u8& image, const std:
     clip_image_u8 padded_image;
     padded_image.nx = target_width;
     padded_image.ny = target_height;
-    padded_image.buf.resize(3 * target_width * target_height, 0); // Initialize with black
+    padded_image.buf.resize(3 * target_width * target_height, 0);  // Initialize with black
 
     // Calculate padding offsets
     int pad_x = (target_width - new_width) / 2;
@@ -146,7 +146,8 @@ static clip_image_u8 resize_and_pad_image(const clip_image_u8& image, const std:
     for (int y = 0; y < new_height; ++y) {
         for (int x = 0; x < new_width; ++x) {
             for (int c = 0; c < 3; ++c) {
-                padded_image.buf[3 * ((y + pad_y) * target_width + (x + pad_x)) + c] = resized_image.buf[3 * (y * new_width + x) + c];
+                padded_image.buf[3 * ((y + pad_y) * target_width + (x + pad_x)) + c] =
+                    resized_image.buf[3 * (y * new_width + x) + c];
             }
         }
     }
@@ -160,7 +161,8 @@ static clip_image_u8 resize_and_pad_image(const clip_image_u8& image, const std:
  * @param possible_resolutions A list of possible resolutions in the format [(width1, height1), (width2, height2), ...].
  * @return The best fit resolution in the format (width, height).
  */
-std::pair<int, int> select_best_resolution(const std::pair<int, int> & original_size, const std::vector<std::pair<int, int>> & possible_resolutions) {
+std::pair<int, int> select_best_resolution(const std::pair<int, int>& original_size,
+                                           const std::vector<std::pair<int, int>>& possible_resolutions) {
     // TODO Consider changing original_size and return value to (height, width) format
     int original_width = original_size.first;
     int original_height = original_size.second;
@@ -171,12 +173,14 @@ std::pair<int, int> select_best_resolution(const std::pair<int, int> & original_
     for (const auto& resolution : possible_resolutions) {
         int width = resolution.first;
         int height = resolution.second;
-        float scale = std::min(static_cast<float>(width) / original_width, static_cast<float>(height) / original_height);
+        float scale =
+            std::min(static_cast<float>(width) / original_width, static_cast<float>(height) / original_height);
         int downscaled_width = static_cast<int>(original_width * scale);
         int downscaled_height = static_cast<int>(original_height * scale);
         int effective_resolution = std::min(downscaled_width * downscaled_height, original_width * original_height);
         int wasted_resolution = (width * height) - effective_resolution;
-        if (effective_resolution > max_effective_resolution || (effective_resolution == max_effective_resolution && wasted_resolution < min_wasted_resolution)) {
+        if (effective_resolution > max_effective_resolution ||
+            (effective_resolution == max_effective_resolution && wasted_resolution < min_wasted_resolution)) {
             max_effective_resolution = effective_resolution;
             min_wasted_resolution = wasted_resolution;
             best_fit = resolution;
@@ -186,7 +190,8 @@ std::pair<int, int> select_best_resolution(const std::pair<int, int> & original_
     return best_fit;
 }
 
-// returns the normalized float tensor for llava-1.5, for spatial_unpad with anyres processing for llava-1.6 it returns the normalized image patch tensors as a vector
+// returns the normalized float tensor for llava-1.5, for spatial_unpad with anyres processing for llava-1.6 it returns
+// the normalized image patch tensors as a vector
 clip_image_f32 clip_image_preprocess(clip_ctx& ctx, const clip_image_u8& img) {
     bool pad_to_square = true;
 
@@ -195,7 +200,6 @@ clip_image_f32 clip_image_preprocess(clip_ctx& ctx, const clip_image_u8& img) {
     temp.ny = img.ny;
     temp.buf.resize(img.buf.size());
     memcpy(temp.buf.data(), img.buf.data(), temp.buf.size());
-
 
     const int nx = temp.nx;
     const int ny = temp.ny;
@@ -211,8 +215,8 @@ clip_image_f32 clip_image_preprocess(clip_ctx& ctx, const clip_image_u8& img) {
     const int nx3 = nx;
     const int ny3 = ny;
 
-    const auto& m3 = ctx.image_mean; // {0.48145466f, 0.4578275f, 0.40821073f};
-    const auto& s3 = ctx.image_std;  // {0.26862954f, 0.26130258f, 0.27577711f};
+    const auto& m3 = ctx.image_mean;  // {0.48145466f, 0.4578275f, 0.40821073f};
+    const auto& s3 = ctx.image_std;   // {0.26862954f, 0.26130258f, 0.27577711f};
 
     for (int y = 0; y < ny3; y++) {
         for (int x = 0; x < nx3; x++) {
@@ -247,7 +251,7 @@ clip_image_f32 clip_image_preprocess(clip_ctx& ctx, const clip_image_u8& img) {
 
                 const uint8_t v2 = std::min(std::max(std::round(v), 0.0f), 255.0f);
 
-                //rgb hwc ->chw
+                // rgb hwc ->chw
                 const int i = (y * nx3 + x) + c * nx3 * ny3;
 
                 res.buf[i] = ((float(v2) / 255.0f) - m3[c]) / s3[c];
@@ -257,12 +261,10 @@ clip_image_f32 clip_image_preprocess(clip_ctx& ctx, const clip_image_u8& img) {
     return res;
 }
 
-std::vector<clip_image_u8> get_image_patches(
-    const clip_image_u8& image, 
-    const std::vector<std::pair<int, int>>& image_grid_pinpoints,
-    const std::pair<int, int>& size,
-    int patch_size
-) {
+std::vector<clip_image_u8> get_image_patches(const clip_image_u8& image,
+                                             const std::vector<std::pair<int, int>>& image_grid_pinpoints,
+                                             const std::pair<int, int>& size,
+                                             int patch_size) {
     std::vector<clip_image_u8> patches;
 
     // Get image dimensions
@@ -274,7 +276,7 @@ std::vector<clip_image_u8> get_image_patches(
     int base_patch_height = size.second;
     clip_image_u8 base_patch;
     bicubic_resize(image, base_patch, base_patch_width, base_patch_height);
-    
+
     patches.push_back(base_patch);
 
     // Select best resolution for patching

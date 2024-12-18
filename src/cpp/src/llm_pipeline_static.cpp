@@ -9,22 +9,20 @@
 #include "openvino/pass/stateful_to_stateless.hpp"
 
 // NB: decompose SDPA
-#include "openvino/pass/matcher_pass.hpp"
-#include "openvino/pass/manager.hpp"
-#include "openvino/pass/graph_rewrite.hpp"
-#include "openvino/pass/pattern/op/wrap_type.hpp"
-
-#include "openvino/runtime/core.hpp"
-#include "openvino/opsets/opset13.hpp"
-#include "openvino/core/preprocess/pre_post_process.hpp"
-#include "openvino/runtime/properties.hpp"
-#include "openvino/runtime/intel_npu/properties.hpp"
-#include "openvino/core/parallel.hpp"
-
 #include <jinja2cpp/user_callable.h>
 
-#include "text_callback_streamer.hpp"
 #include "json_utils.hpp"
+#include "openvino/core/parallel.hpp"
+#include "openvino/core/preprocess/pre_post_process.hpp"
+#include "openvino/opsets/opset13.hpp"
+#include "openvino/pass/graph_rewrite.hpp"
+#include "openvino/pass/manager.hpp"
+#include "openvino/pass/matcher_pass.hpp"
+#include "openvino/pass/pattern/op/wrap_type.hpp"
+#include "openvino/runtime/core.hpp"
+#include "openvino/runtime/intel_npu/properties.hpp"
+#include "openvino/runtime/properties.hpp"
+#include "text_callback_streamer.hpp"
 #include "utils.hpp"
 
 namespace {
@@ -48,15 +46,15 @@ public:
         auto callback = [=](ov::pass::pattern::Matcher& m) {
             auto& node_to_output = m.get_pattern_value_map();
 
-            auto matched_node_param     = node_to_output.at(param).get_node_shared_ptr();
-            auto matched_node_concat    = node_to_output.at(concat).get_node_shared_ptr();
+            auto matched_node_param = node_to_output.at(param).get_node_shared_ptr();
+            auto matched_node_concat = node_to_output.at(concat).get_node_shared_ptr();
             auto matched_node_transpose = node_to_output.at(transpose).get_node_shared_ptr();
-            auto matched_node_matmul    = node_to_output.at(matmul).get_node_shared_ptr();
+            auto matched_node_matmul = node_to_output.at(matmul).get_node_shared_ptr();
 
-            auto matched_param     = std::static_pointer_cast<ov::op::v0::Parameter>(matched_node_param);
-            auto matched_concat    = std::static_pointer_cast<ov::op::v0::Concat>(matched_node_concat);
+            auto matched_param = std::static_pointer_cast<ov::op::v0::Parameter>(matched_node_param);
+            auto matched_concat = std::static_pointer_cast<ov::op::v0::Concat>(matched_node_concat);
             auto matched_transpose = std::static_pointer_cast<ov::op::v1::Transpose>(matched_node_transpose);
-            auto matched_matmul    = std::static_pointer_cast<ov::op::v0::MatMul>(matched_node_matmul);
+            auto matched_matmul = std::static_pointer_cast<ov::op::v0::MatMul>(matched_node_matmul);
 
             auto shape = matched_param->get_partial_shape();
             OPENVINO_ASSERT(shape.size() == 4u);
@@ -65,21 +63,22 @@ public:
             std::swap(shape[2], shape[3]);
             auto new_param = std::make_shared<ov::opset13::Parameter>(matched_param->get_element_type(), shape);
             new_param->set_friendly_name(matched_param->get_friendly_name());
-            new_param->outputs().begin()->get_tensor().set_names(matched_param->outputs().begin()->get_tensor().get_names());
+            new_param->outputs().begin()->get_tensor().set_names(
+                matched_param->outputs().begin()->get_tensor().get_names());
             ov::replace_node(matched_param, new_param);
             // NB: Save in order to add/remove to the model later on
             ctx.get().new_params.push_back(new_param);
             ctx.get().old_params.push_back(matched_param);
 
             auto order_cst = ov::op::v0::Constant::create(ov::element::i32, ov::Shape{4}, {0, 2, 3, 1});
-            auto new_transpose = std::make_shared<ov::opset13::Transpose>(matched_transpose->input_value(0),
-                                                                          order_cst->output(0));
+            auto new_transpose =
+                std::make_shared<ov::opset13::Transpose>(matched_transpose->input_value(0), order_cst->output(0));
             new_transpose->set_friendly_name(matched_transpose->get_friendly_name());
             ov::replace_node(matched_transpose, new_transpose);
 
-            auto new_concat = std::make_shared<ov::opset13::Concat>(
-                ov::OutputVector{new_param->output(0), new_transpose->output(0)}, 3u
-            );
+            auto new_concat =
+                std::make_shared<ov::opset13::Concat>(ov::OutputVector{new_param->output(0), new_transpose->output(0)},
+                                                      3u);
             new_concat->set_friendly_name(matched_concat->get_friendly_name());
             ov::replace_node(matched_concat, new_concat);
 
@@ -100,7 +99,7 @@ public:
         ov::matcher_pass_callback callback = [=](ov::pass::pattern::Matcher& m) {
             auto& pattern_to_output = m.get_pattern_value_map();
             auto node = ov::as_type_ptr<ov::op::v13::ScaledDotProductAttention>(
-                    pattern_to_output.at(pattern_node).get_node_shared_ptr());
+                pattern_to_output.at(pattern_node).get_node_shared_ptr());
 
             if (node == nullptr || transformation_callback(node)) {
                 return false;
@@ -146,7 +145,7 @@ public:
         k_rank = register_new_node<v0::Squeeze>(k_rank, zero_i);
         auto minus_inf =
             register_new_node(v0::Constant::create(element::f32, Shape{}, {-std::numeric_limits<float>::infinity()}))
-            ->output(0);
+                ->output(0);
         auto keep_dim_last = register_new_node<v0::Squeeze>(k_next_dim, zero_i);
         auto k_dims_before_transpose = register_new_node<v4::Range>(zero_i, keep_dim_last, one_i, element::i32);
 
@@ -159,9 +158,9 @@ public:
             if (!node->get_causal()) {
                 mask = node->input_value(3);
 
-                // two types of masks are supported. A boolean mask where a value of True indicates that the element should
-                // take part in attention. A float mask of the same type as query, key, value that is added to the attention
-                // score.
+                // two types of masks are supported. A boolean mask where a value of True indicates that the element
+                // should take part in attention. A float mask of the same type as query, key, value that is added to
+                // the attention score.
                 if (mask.get_element_type() == element::boolean) {
                     atten_mask = register_new_node<v1::ConvertLike>(mask, scaled_atten);
                     auto inv_mask = register_new_node<v1::LogicalNot>(mask);
@@ -176,7 +175,8 @@ public:
                 auto tsl = register_new_node<v0::Unsqueeze>(target_s_len, zero_i);
                 auto mask_shape = register_new_node<v0::Concat>(OutputVector{tsl, ssl}, 0);
                 mask = register_new_node<v1::Broadcast>(minus_inf, mask_shape);
-                auto horizontal_range = register_new_node<v4::Range>(zero_i, source_s_len, one_i, element::i32)->output(0);
+                auto horizontal_range =
+                    register_new_node<v4::Range>(zero_i, source_s_len, one_i, element::i32)->output(0);
                 horizontal_range = register_new_node<v0::Unsqueeze>(horizontal_range, zero_i);
                 auto stop = register_new_node<v1::Add>(target_s_len, one_i);
                 auto vertical_range = register_new_node<v4::Range>(one_i, stop, one_i, element::i32)->output(0);
@@ -228,19 +228,16 @@ uint32_t align_to(uint32_t value, uint32_t alignment) {
     return (value + alignment - 1) & ~(alignment - 1);
 }
 
-enum class GenerateHint {
-    FAST_COMPILE,
-    BEST_PERF
-};
+enum class GenerateHint { FAST_COMPILE, BEST_PERF };
 
 std::string to_string(GenerateHint h) {
-    switch(h) {
-        case GenerateHint::FAST_COMPILE : 
-            return "FAST_COMPILE";
-        case GenerateHint::BEST_PERF : 
-            return "BEST_PERF";
-        default:
-            OPENVINO_THROW("Unsupported value for type GenerateHint provided");        
+    switch (h) {
+    case GenerateHint::FAST_COMPILE:
+        return "FAST_COMPILE";
+    case GenerateHint::BEST_PERF:
+        return "BEST_PERF";
+    default:
+        OPENVINO_THROW("Unsupported value for type GenerateHint provided");
     }
 }
 
@@ -251,8 +248,8 @@ GenerateHint str_to_hint(const std::string& str) {
     if (str == to_string(GenerateHint::BEST_PERF)) {
         return GenerateHint::BEST_PERF;
     }
-    OPENVINO_THROW("Unsupported \"GENERATE_HINT\" provided: " +
-                   str + ". Please select either \"" + to_string(GenerateHint::BEST_PERF) + "\" or \"" + to_string(GenerateHint::FAST_COMPILE) +"\".");
+    OPENVINO_THROW("Unsupported \"GENERATE_HINT\" provided: " + str + ". Please select either \"" +
+                   to_string(GenerateHint::BEST_PERF) + "\" or \"" + to_string(GenerateHint::FAST_COMPILE) + "\".");
 }
 
 std::shared_ptr<ov::Model> cvt_kvcache_to_fp16(const std::shared_ptr<ov::Model>& model) {
@@ -324,10 +321,10 @@ std::optional<T> get_option(const ov::AnyMap& config, const std::string& option_
 std::shared_ptr<ov::Model> redirect_new_kv_to_output(const std::shared_ptr<ov::Model>& model) {
     const auto kStartOutputKVCacheLayers = 1u;
     for (int i = kStartOutputKVCacheLayers; i < model->outputs().size(); ++i) {
-        auto kvout  = model->output(i);
+        auto kvout = model->output(i);
         auto kvrslt = kvout.get_node();
-        auto kvcat  = kvrslt->inputs()[0].get_source_output().get_node();
-        auto kvval  = kvcat->inputs()[1].get_source_output();
+        auto kvcat = kvrslt->inputs()[0].get_source_output().get_node();
+        auto kvval = kvcat->inputs()[1].get_source_output();
         kvval.set_names({kvout.get_any_name()});
         kvrslt->inputs()[0].replace_source_output(kvval);
     }
@@ -351,21 +348,20 @@ std::shared_ptr<ov::Model> add_slices_to_kvcache_inputs(const std::shared_ptr<ov
         new_param->set_friendly_name(tensor_name);
         new_param->outputs().begin()->get_tensor().set_names(param->outputs().begin()->get_tensor().get_names());
 
-        auto slice_start = std::make_shared<ov::opset13::Constant>(
-            ov::element::Type_t::i32, ov::Shape{1}, std::vector<int32_t>{1}
-        );
-        auto slice_stop = std::make_shared<ov::opset13::Constant>(
-            ov::element::Type_t::i32, ov::Shape{1}, std::vector<int32_t>{static_cast<int32_t>(shape[2])}
-        );
-        auto slice_step = std::make_shared<ov::opset13::Constant>(
-            ov::element::Type_t::i32, ov::Shape{1}, std::vector<int32_t>{1}
-        );
-        auto slice_axes = std::make_shared<ov::opset13::Constant>(
-            ov::element::Type_t::i32, ov::Shape{1}, std::vector<int32_t>{2}
-        );
-        auto slice_node = std::make_shared<ov::opset13::Slice>(
-            new_param, slice_start->output(0), slice_stop->output(0), slice_step->output(0), slice_axes->output(0)
-        );
+        auto slice_start =
+            std::make_shared<ov::opset13::Constant>(ov::element::Type_t::i32, ov::Shape{1}, std::vector<int32_t>{1});
+        auto slice_stop = std::make_shared<ov::opset13::Constant>(ov::element::Type_t::i32,
+                                                                  ov::Shape{1},
+                                                                  std::vector<int32_t>{static_cast<int32_t>(shape[2])});
+        auto slice_step =
+            std::make_shared<ov::opset13::Constant>(ov::element::Type_t::i32, ov::Shape{1}, std::vector<int32_t>{1});
+        auto slice_axes =
+            std::make_shared<ov::opset13::Constant>(ov::element::Type_t::i32, ov::Shape{1}, std::vector<int32_t>{2});
+        auto slice_node = std::make_shared<ov::opset13::Slice>(new_param,
+                                                               slice_start->output(0),
+                                                               slice_stop->output(0),
+                                                               slice_step->output(0),
+                                                               slice_axes->output(0));
         slice_node->set_friendly_name(tensor_name + "_Slice");
         for (auto target_input : param->output(0).get_target_inputs()) {
             target_input.replace_source_output(slice_node->output(0));
@@ -475,8 +471,7 @@ std::optional<NPUDesc> extract_npu_descriptor(ov::Core& core) {
 
     bool compiler_dq = false;
     const auto device_caps = core.get_property("NPU", ov::device::capabilities);
-    if (std::find(device_caps.begin(), device_caps.end(),
-                  "COMPILER_DYNAMIC_QUANTIZATION") != device_caps.end()) {
+    if (std::find(device_caps.begin(), device_caps.end(), "COMPILER_DYNAMIC_QUANTIZATION") != device_caps.end()) {
         compiler_dq = true;
     }
     return std::make_optional(NPUDesc{arch, max_tiles, compiler_dq});
@@ -484,16 +479,15 @@ std::optional<NPUDesc> extract_npu_descriptor(ov::Core& core) {
 
 ov::AnyMap get_baseline_common_config() {
     ov::AnyMap config = {
-        { "NPU_COMPILATION_MODE_PARAMS", "compute-layers-with-higher-precision=Sqrt,Power,ReduceMean,Add_RMSNorm" },
-        { "NPUW_DEVICES", "NPU" },
-        { "NPU_USE_NPUW",  "YES" },
-        { "NPUW_FOLD", "YES" },
-        { "NPUW_DCOFF_TYPE", "f16" },
-        { "NPUW_DCOFF_SCALE", "YES"},
-        { "NPUW_WEIGHTS_BANK", "shared" },
-        { "NPUW_SLICE_OUT", "YES" },
-        { "NPUW_FUNCALL_ASYNC", "YES" }
-    };
+        {"NPU_COMPILATION_MODE_PARAMS", "compute-layers-with-higher-precision=Sqrt,Power,ReduceMean,Add_RMSNorm"},
+        {"NPUW_DEVICES", "NPU"},
+        {"NPU_USE_NPUW", "YES"},
+        {"NPUW_FOLD", "YES"},
+        {"NPUW_DCOFF_TYPE", "f16"},
+        {"NPUW_DCOFF_SCALE", "YES"},
+        {"NPUW_WEIGHTS_BANK", "shared"},
+        {"NPUW_SLICE_OUT", "YES"},
+        {"NPUW_FUNCALL_ASYNC", "YES"}};
     return config;
 }
 
@@ -508,17 +502,14 @@ ov::AnyMap get_default_common_config(const std::shared_ptr<ov::Model>& model) {
     return config;
 }
 
-ov::AnyMap get_default_prefill_config(const std::shared_ptr<ov::Model>& model,
-                                      const std::optional<NPUDesc>& npudesc) {
+ov::AnyMap get_default_prefill_config(const std::shared_ptr<ov::Model>& model, const std::optional<NPUDesc>& npudesc) {
     auto config = get_default_common_config(model);
     if (is_cw_compressed(model)) {
         config.emplace("NPUW_DQ", "YES");
     } else {
         config.emplace("NPUW_PMM", "NO");
     }
-    if (npudesc.has_value() &&
-        npudesc->arch == "4000" &&
-        npudesc->max_tiles != -1) {
+    if (npudesc.has_value() && npudesc->arch == "4000" && npudesc->max_tiles != -1) {
         config.emplace("NPU_DPU_GROUPS", npudesc->max_tiles);
     }
     if (npudesc.has_value() && npudesc->compiler_dq) {
@@ -610,7 +601,7 @@ void copy_columns_by_row_chunks(const ov::Tensor& src, ov::Tensor& dst) {
 
     const auto src_strides = src.get_strides();
     const auto dst_strides = dst.get_strides();
-    const auto elem_size   = src.get_byte_size() / src.get_size();
+    const auto elem_size = src.get_byte_size() / src.get_size();
 
     const auto C = src_shape[1];
     const auto H = src_shape[2];
@@ -621,28 +612,26 @@ void copy_columns_by_row_chunks(const ov::Tensor& src, ov::Tensor& dst) {
 
     const size_t chunk_byte_size = W * elem_size;
 
-    const auto* src_p  = static_cast<uint8_t*>(src.data());
-          auto* dst_p  = static_cast<uint8_t*>(dst.data());
+    const auto* src_p = static_cast<uint8_t*>(src.data());
+    auto* dst_p = static_cast<uint8_t*>(dst.data());
 
-    for (size_t i = 0; i < C*H; ++i) {
+    for (size_t i = 0; i < C * H; ++i) {
         const size_t src_offset = i * IS_H;
         const size_t dst_offset = i * OS_H;
         std::copy_n(src_p + src_offset, chunk_byte_size, dst_p + dst_offset);
     }
 }
 
-} // anonymous namespace
+}  // anonymous namespace
 
 namespace ov {
 namespace genai {
 
-StaticLLMPipeline::StaticLLMPipeline(
-    const std::filesystem::path& models_path,
-    const ov::genai::Tokenizer& tokenizer,
-    const std::string& device,
-    const ov::AnyMap& config
-) : LLMPipelineImplBase(tokenizer,
-                        utils::from_config_json_if_exists(models_path)) {
+StaticLLMPipeline::StaticLLMPipeline(const std::filesystem::path& models_path,
+                                     const ov::genai::Tokenizer& tokenizer,
+                                     const std::string& device,
+                                     const ov::AnyMap& config)
+    : LLMPipelineImplBase(tokenizer, utils::from_config_json_if_exists(models_path)) {
     auto properties = config;
     /* NB: Static LLM pipeline consists of two models,
        first to process the input prompt (prefill),
@@ -673,22 +662,18 @@ StaticLLMPipeline::StaticLLMPipeline(
     }
 };
 
-StaticLLMPipeline::StaticLLMPipeline(
-    const std::filesystem::path& models_path,
-    const std::string& device,
-    const ov::AnyMap& properties
-) : StaticLLMPipeline(models_path, Tokenizer(models_path), device, properties) {
-}
+StaticLLMPipeline::StaticLLMPipeline(const std::filesystem::path& models_path,
+                                     const std::string& device,
+                                     const ov::AnyMap& properties)
+    : StaticLLMPipeline(models_path, Tokenizer(models_path), device, properties) {}
 
-StaticLLMPipeline::StaticLLMPipeline(
-    const std::shared_ptr<ov::Model>& model,
-    const ModelConfigDesc& model_desc,
-    const ov::genai::Tokenizer& tokenizer,
-    const std::string& device,
-    const ov::AnyMap& properties,
-    const ov::genai::GenerationConfig& generation_config
-) : LLMPipelineImplBase(tokenizer, generation_config) {
-    
+StaticLLMPipeline::StaticLLMPipeline(const std::shared_ptr<ov::Model>& model,
+                                     const ModelConfigDesc& model_desc,
+                                     const ov::genai::Tokenizer& tokenizer,
+                                     const std::string& device,
+                                     const ov::AnyMap& properties,
+                                     const ov::genai::GenerationConfig& generation_config)
+    : LLMPipelineImplBase(tokenizer, generation_config) {
     bool use_blobs = false;
     auto anyopt = get_option<bool>(properties, "USE_BLOBS");
     if (anyopt.has_value()) {
@@ -709,11 +694,10 @@ StaticLLMPipeline::StaticLLMPipeline(
     }
 }
 
-void StaticLLMPipeline::setupAndCompileModels(
-    const std::shared_ptr<ov::Model>& model,
-    const std::string& device,
-    const ModelConfigDesc& model_desc,
-    ov::AnyMap& properties) {
+void StaticLLMPipeline::setupAndCompileModels(const std::shared_ptr<ov::Model>& model,
+                                              const std::string& device,
+                                              const ModelConfigDesc& model_desc,
+                                              ov::AnyMap& properties) {
     /* Initialization assumes multiple steps if user passes "USE_BLOBS=NO":
         1) Read the template model - this will be kvcache model
         2) Expose KV-cache input and output layers from kvcache model
@@ -744,12 +728,12 @@ void StaticLLMPipeline::setupAndCompileModels(
     const uint32_t kMinResponseLen = align_to(pop_int_and_cast(properties, "MIN_RESPONSE_LEN").value_or(128u), 64u);
 
     KVAxesPosition axes = get_kv_axes(model_desc.type);
-    m_kvcache_desc = KVCacheDesc { kMaxPromptLen, kMaxPromptLen + kMinResponseLen, 0u, axes.seq_len, false};
+    m_kvcache_desc = KVCacheDesc{kMaxPromptLen, kMaxPromptLen + kMinResponseLen, 0u, axes.seq_len, false};
     reshape_to_static(prefill_model, m_kvcache_desc.max_prompt_size, m_kvcache_desc.max_prompt_size, axes);
     reshape_to_static(kvcache_model, 1u, m_kvcache_desc.total_size, axes);
     // (6) Apply opt layout if applicable
     // NB: Try to apply opt transpose only for Llama-2-7b-chat-hf model
-    if ( model_desc.name_or_path == "meta-llama/Llama-2-7b-chat-hf" ||
+    if (model_desc.name_or_path == "meta-llama/Llama-2-7b-chat-hf" ||
         (model_desc.type == "llama" && model_desc.num_key_value_heads == 32)) {
         if (optimize_value_tensors(kvcache_model)) {
             // NB: Check if TransposeValueTensors transformation was applied
@@ -763,23 +747,21 @@ void StaticLLMPipeline::setupAndCompileModels(
     kvcache_model = cvt_kvcache_to_fp16(kvcache_model);
     prefill_model = cvt_kvcache_to_fp16(prefill_model);
     // (9) Compile both model
-    auto prefill_config = pop_or_default(
-        properties, "PREFILL_CONFIG", get_default_prefill_config(prefill_model, npudesc)
-    );
+    auto prefill_config =
+        pop_or_default(properties, "PREFILL_CONFIG", get_default_prefill_config(prefill_model, npudesc));
     // NB: GENERATE_HINT is only applicable for default generate config!
-    auto generate_hint = str_to_hint(pop_or_default<std::string>(properties, "GENERATE_HINT", to_string(GenerateHint::FAST_COMPILE)));
-    auto generate_config = pop_or_default(
-        properties, "GENERATE_CONFIG", get_default_generate_config(kvcache_model, npudesc, generate_hint)
-    );
+    auto generate_hint =
+        str_to_hint(pop_or_default<std::string>(properties, "GENERATE_HINT", to_string(GenerateHint::FAST_COMPILE)));
+    auto generate_config = pop_or_default(properties,
+                                          "GENERATE_CONFIG",
+                                          get_default_generate_config(kvcache_model, npudesc, generate_hint));
     merge_config_with(prefill_config, properties);
     merge_config_with(generate_config, properties);
     // Replace CACHE_DIR option if NPUW is enabled
     set_npuw_cache_dir(prefill_config);
     set_npuw_cache_dir(generate_config);
 
-    auto kv_compiled_model = core.compile_model(
-        kvcache_model, device, generate_config
-    );
+    auto kv_compiled_model = core.compile_model(kvcache_model, device, generate_config);
     ov::genai::utils::print_compiled_model_properties(kv_compiled_model, "Static LLM kv compiled model");
     m_kvcache_request = kv_compiled_model.create_infer_request();
 
@@ -788,10 +770,9 @@ void StaticLLMPipeline::setupAndCompileModels(
     ov::genai::utils::print_compiled_model_properties(prefill_compiled_model, "Static LLM prefill compiled model");
 }
 
-void StaticLLMPipeline::setupAndImportModels(
-    const std::filesystem::path& models_path,
-    const std::string& device,
-    ov::AnyMap& properties) {
+void StaticLLMPipeline::setupAndImportModels(const std::filesystem::path& models_path,
+                                             const std::string& device,
+                                             ov::AnyMap& properties) {
     /* To initialize pipeline in case when user passes "USE_BLOBS=YES",
        next steps are required:
         1) Check that neither MAX_PROMPT_LEN nor MIN_RESPONSE_LEN is
@@ -803,31 +784,23 @@ void StaticLLMPipeline::setupAndImportModels(
     */
     ov::Core core;
 
-    auto import_blob = [this,
-                        &models_path,
-                        &properties,
-                        &core,
-                        &device](const std::string& model_name,
-                                 ov::AnyMap& model_config) {
+    auto import_blob = [this, &models_path, &properties, &core, &device](const std::string& model_name,
+                                                                         ov::AnyMap& model_config) {
         auto blob_path = pop_or_default(model_config, "BLOB_PATH", std::string{});
 
         if (blob_path.empty()) {
-            blob_path = (models_path /
-                (std::string("openvino_") + model_name + ".blob")).string();
+            blob_path = (models_path / (std::string("openvino_") + model_name + ".blob")).string();
         }
 
         if (!std::filesystem::exists(blob_path)) {
-            OPENVINO_THROW("Blob for " + model_name + " model is not found at: "
-                + blob_path);
+            OPENVINO_THROW("Blob for " + model_name + " model is not found at: " + blob_path);
         }
 
         merge_config_with(model_config, properties);
 
         std::fstream fs(blob_path, std::ios::in | std::ios::binary);
 
-        return core.import_model(
-            fs, device, model_config);
-
+        return core.import_model(fs, device, model_config);
     };
 
     auto get_kvcache_size = [](ov::CompiledModel& model) {
@@ -842,10 +815,9 @@ void StaticLLMPipeline::setupAndImportModels(
 
     // (1) Check that neither MAX_PROMPT_LEN nor MIN_RESPONSE_LEN is
     //     exposed in the config
-    if (properties.count("MAX_PROMPT_LEN") ||
-        properties.count("MIN_RESPONSE_LEN")) {
+    if (properties.count("MAX_PROMPT_LEN") || properties.count("MIN_RESPONSE_LEN")) {
         OPENVINO_THROW("Neither \"MAX_PROMPT_LEN\" nor \"MIN_RESPONSE_LEN\""
-           " can be specified in \"USE_BLOBS=YES\" configuration!");
+                       " can be specified in \"USE_BLOBS=YES\" configuration!");
     }
     // (2) Import prefill model from model directory or specified path
     auto prefill_config = pop_or_default(properties, "PREFILL_CONFIG", ov::AnyMap());
@@ -859,7 +831,7 @@ void StaticLLMPipeline::setupAndImportModels(
     const uint32_t kMaxPromptLen = get_kvcache_size(prefill_model);
     const uint32_t kMinResponseLen = get_kvcache_size(generate_model) - kMaxPromptLen;
     // FIXME For some models KV-cache dim != 2u
-    m_kvcache_desc = KVCacheDesc { kMaxPromptLen, kMaxPromptLen + kMinResponseLen, 0u, 2u };
+    m_kvcache_desc = KVCacheDesc{kMaxPromptLen, kMaxPromptLen + kMinResponseLen, 0u, 2u};
 }
 
 void StaticLLMPipeline::start_chat(const std::string& system_message) {
@@ -882,11 +854,9 @@ void StaticLLMPipeline::prepare_for_new_conversation() {
     m_kvcache_desc.num_stored_tokens = 0u;
 }
 
-DecodedResults StaticLLMPipeline::generate(
-    StringInputs inputs,
-    OptionalGenerationConfig generation_config,
-    StreamerVariant streamer
-) {
+DecodedResults StaticLLMPipeline::generate(StringInputs inputs,
+                                           OptionalGenerationConfig generation_config,
+                                           StreamerVariant streamer) {
     auto start_time = std::chrono::steady_clock::now();
 
     GenerationConfig config = (generation_config.has_value()) ? *generation_config : m_generation_config;
@@ -913,12 +883,12 @@ DecodedResults StaticLLMPipeline::generate(
         tokenized_input = m_tokenizer.encode(prompt);
     }
 
-    auto encode_stop_time =  std::chrono::steady_clock::now();
+    auto encode_stop_time = std::chrono::steady_clock::now();
     auto encoded_results = generate(tokenized_input, config, streamer);
 
-    auto decode_start_time =  std::chrono::steady_clock::now();
+    auto decode_start_time = std::chrono::steady_clock::now();
     DecodedResults decoded_results = {m_tokenizer.decode(encoded_results.tokens), encoded_results.scores};
-    auto decode_stop_time =  std::chrono::steady_clock::now();
+    auto decode_stop_time = std::chrono::steady_clock::now();
 
     if (m_is_chat_conversation) {
         auto answer = decoded_results.texts[0];
@@ -937,11 +907,9 @@ DecodedResults StaticLLMPipeline::generate(
     return decoded_results;
 }
 
-EncodedResults StaticLLMPipeline::generate(
-    const EncodedInputs& inputs,
-    OptionalGenerationConfig generation_config,
-    StreamerVariant streamer
-) {
+EncodedResults StaticLLMPipeline::generate(const EncodedInputs& inputs,
+                                           OptionalGenerationConfig generation_config,
+                                           StreamerVariant streamer) {
     auto start_time = std::chrono::steady_clock::now();
     ov::Tensor input_ids;
     ov::Tensor attention_mask;
@@ -989,9 +957,9 @@ EncodedResults StaticLLMPipeline::generate(
     // NB: Check if there is enough space in KV-cache to process input prompt
     auto prompt_len = input_ids.get_size();
     if (prompt_len > m_kvcache_desc.max_prompt_size) {
-        OPENVINO_THROW("Static LLM pipeline may only process prompts up to "
-                       + std::to_string(m_kvcache_desc.max_prompt_size) + " tokens. "
-                       + "Set the \"MAX_PROMPT_LEN\" config option to increase the limit.");
+        OPENVINO_THROW("Static LLM pipeline may only process prompts up to " +
+                       std::to_string(m_kvcache_desc.max_prompt_size) + " tokens. " +
+                       "Set the \"MAX_PROMPT_LEN\" config option to increase the limit.");
     }
 
     // NB: From the "generate" perspective, every call is treated as start of new conversation,
@@ -1028,22 +996,22 @@ EncodedResults StaticLLMPipeline::generate(
 
     ov::parallel_for(kvcache_compiled.outputs().size() - 1, [&](size_t i) {
         const auto& output_name = kvcache_compiled.outputs()[kStartOutputKVCacheLayers + i].get_any_name();
-        const auto  input_name = std::regex_replace(output_name, std::regex("present"), "past_key_values");
+        const auto input_name = std::regex_replace(output_name, std::regex("present"), "past_key_values");
 
-        const auto kv_dim = (output_name.find("value") != std::string::npos &&
-            m_kvcache_desc.v_tensors_transposed) ? 3u : m_kvcache_desc.seq_len;
+        const auto kv_dim = (output_name.find("value") != std::string::npos && m_kvcache_desc.v_tensors_transposed)
+                                ? 3u
+                                : m_kvcache_desc.seq_len;
 
         auto prefill_out_tensor = m_prefill_request.get_tensor(output_name);
-        auto prefill_out_slice = make_tensor_slice(
-            prefill_out_tensor, kv_dim, m_kvcache_desc.max_prompt_size - m_kvcache_desc.num_stored_tokens, m_kvcache_desc.max_prompt_size
-        );
+        auto prefill_out_slice = make_tensor_slice(prefill_out_tensor,
+                                                   kv_dim,
+                                                   m_kvcache_desc.max_prompt_size - m_kvcache_desc.num_stored_tokens,
+                                                   m_kvcache_desc.max_prompt_size);
 
         auto kvcache_in_tensor = m_kvcache_request.get_tensor(input_name);
         fill_tensor<ov::float16>(kvcache_in_tensor, 0);
 
-        auto kvcache_in_slice = make_tensor_slice(
-            kvcache_in_tensor, kv_dim, 0u, m_kvcache_desc.num_stored_tokens
-        );
+        auto kvcache_in_slice = make_tensor_slice(kvcache_in_tensor, kv_dim, 0u, m_kvcache_desc.num_stored_tokens);
 
         if (kv_dim == 3u) {
             copy_columns_by_row_chunks(prefill_out_slice, kvcache_in_slice);
@@ -1092,13 +1060,15 @@ EncodedResults StaticLLMPipeline::generate(
             const auto& output_name = kvcache_compiled.outputs()[kStartOutputKVCacheLayers + i].get_any_name();
             std::string input_name = std::regex_replace(output_name, std::regex("present"), "past_key_values");
 
-            const auto kv_dim = (output_name.find("value") != std::string::npos &&
-                m_kvcache_desc.v_tensors_transposed) ? 3u : m_kvcache_desc.seq_len;
+            const auto kv_dim = (output_name.find("value") != std::string::npos && m_kvcache_desc.v_tensors_transposed)
+                                    ? 3u
+                                    : m_kvcache_desc.seq_len;
 
             auto kvcache_in_tensor = m_kvcache_request.get_tensor(input_name);
-            auto kvcache_in_slice = make_tensor_slice(
-                kvcache_in_tensor, kv_dim, m_kvcache_desc.num_stored_tokens - 1, m_kvcache_desc.num_stored_tokens
-            );
+            auto kvcache_in_slice = make_tensor_slice(kvcache_in_tensor,
+                                                      kv_dim,
+                                                      m_kvcache_desc.num_stored_tokens - 1,
+                                                      m_kvcache_desc.num_stored_tokens);
             m_kvcache_request.get_tensor(output_name).copy_to(kvcache_in_slice);
         }
     }

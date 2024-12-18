@@ -2,9 +2,10 @@
 // SPDX-License-Identifier: Apache-2.0
 
 #include "vlm_config.hpp"
-#include "json_utils.hpp"
 
 #include <fstream>
+
+#include "json_utils.hpp"
 
 ov::genai::VLMConfig::VLMConfig(const std::filesystem::path& json_path) {
     std::ifstream stream(json_path);

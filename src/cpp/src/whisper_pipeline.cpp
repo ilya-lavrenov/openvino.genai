@@ -65,7 +65,8 @@ public:
             core.compile_model((models_path / "openvino_decoder_model.xml").string(), device, compile_properties);
         ov::genai::utils::print_compiled_model_properties(compiled_model, "whisper decoder model");
         m_models.decoder = compiled_model.create_infer_request();
-        compiled_model = core.compile_model(models_path / "openvino_decoder_with_past_model.xml", device, compile_properties);
+        compiled_model =
+            core.compile_model(models_path / "openvino_decoder_with_past_model.xml", device, compile_properties);
         m_models.decoder_with_past = compiled_model.create_infer_request();
         ov::genai::utils::print_compiled_model_properties(compiled_model, "whisper decoder with past model");
 

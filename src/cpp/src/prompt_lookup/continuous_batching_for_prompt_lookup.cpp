@@ -12,12 +12,15 @@ ContinuousBatchingPipeline::ContinuousBatchingForPromptLookupImpl::get_generated
         const auto request_id = request->get_request_id();
         auto validation_len = request->get_num_tokens_to_validate();
         auto generated_len = request->get_num_processed_tokens() - request->get_prompt_len() + 1;
-        result.insert({ request_id, { generated_len, validation_len } });
+        result.insert({request_id, {generated_len, validation_len}});
     }
     return result;
 }
 
-TokenIds ContinuousBatchingPipeline::ContinuousBatchingForPromptLookupImpl::generate_candidates(const TokenIds& input_ids, size_t num_pred_tokens, size_t max_ngram_size) {
+TokenIds ContinuousBatchingPipeline::ContinuousBatchingForPromptLookupImpl::generate_candidates(
+    const TokenIds& input_ids,
+    size_t num_pred_tokens,
+    size_t max_ngram_size) {
     if (num_pred_tokens == 0) {
         return std::vector<int64_t>{};
     }
@@ -67,10 +70,12 @@ void ContinuousBatchingPipeline::ContinuousBatchingForPromptLookupImpl::generate
             const auto sampling_params = request->get_sampling_parameters();
             {
                 const auto generated_len = running_sequence->get_generated_len();
-                const auto left_generated_len = std::min(sampling_params.max_new_tokens, sampling_params.max_length) - generated_len - 1;
+                const auto left_generated_len =
+                    std::min(sampling_params.max_new_tokens, sampling_params.max_length) - generated_len - 1;
                 min_num_assistant_tokens = std::min(sampling_params.num_assistant_tokens, left_generated_len);
             }
-            TokenIds candidates = generate_candidates(full_input_ids, min_num_assistant_tokens, sampling_params.max_ngram_size);
+            TokenIds candidates =
+                generate_candidates(full_input_ids, min_num_assistant_tokens, sampling_params.max_ngram_size);
 
             if (!candidates.empty()) {
                 for (const auto& candidate : candidates) {
@@ -82,4 +87,4 @@ void ContinuousBatchingPipeline::ContinuousBatchingForPromptLookupImpl::generate
         request->set_num_validated_tokens(max_validation_len);
     }
 }
-}
+}  // namespace ov::genai

@@ -38,8 +38,7 @@ configure_file("${OpenVINOGenAI_SOURCE_DIR}/cmake/templates/__version__.py.in"
                "${CMAKE_BINARY_DIR}/openvino_genai/__version__.py" @ONLY)
 
 if(OpenVINODeveloperPackage_FOUND)
-    # TODO: commit changes separately
-    # ov_add_clang_format_target(${TARGET_NAME}_clang FOR_TARGETS ${TARGET_NAME})
+    ov_add_clang_format_target(${TARGET_NAME}_clang FOR_TARGETS ${TARGET_NAME})
 endif()
 
 if(DEFINED PY_BUILD_CMAKE_PACKAGE_NAME)

@@ -2,11 +2,11 @@
 // SPDX-License-Identifier: Apache-2.0
 
 #include "openvino/genai/image_generation/unet2d_condition_model.hpp"
-#include "image_generation/models/unet_inference_dynamic.hpp"
-#include "image_generation/models/unet_inference_static_bs1.hpp"
 
 #include <fstream>
 
+#include "image_generation/models/unet_inference_dynamic.hpp"
+#include "image_generation/models/unet_inference_static_bs1.hpp"
 #include "json_utils.hpp"
 #include "lora_helper.hpp"
 #include "utils.hpp"
@@ -28,8 +28,7 @@ UNet2DConditionModel::Config::Config(const std::filesystem::path& config_path) {
     read_json_param(data, "time_cond_proj_dim", time_cond_proj_dim);
 }
 
-UNet2DConditionModel::UNet2DConditionModel(const std::filesystem::path& root_dir) :
-    m_config(root_dir / "config.json") {
+UNet2DConditionModel::UNet2DConditionModel(const std::filesystem::path& root_dir) : m_config(root_dir / "config.json") {
     ov::Core core = utils::singleton_core();
     m_model = core.read_model((root_dir / "openvino_model.xml").string());
     m_vae_scale_factor = get_vae_scale_factor(root_dir.parent_path() / "vae_decoder" / "config.json");
@@ -37,16 +36,17 @@ UNet2DConditionModel::UNet2DConditionModel(const std::filesystem::path& root_dir
 
 UNet2DConditionModel::UNet2DConditionModel(const std::filesystem::path& root_dir,
                                            const std::string& device,
-                                           const ov::AnyMap& properties) :
-    UNet2DConditionModel(root_dir) {
+                                           const ov::AnyMap& properties)
+    : UNet2DConditionModel(root_dir) {
     compile(device, properties);
 }
 
 UNet2DConditionModel::UNet2DConditionModel(const std::string& model,
                                            const Tensor& weights,
                                            const Config& config,
-                                           const size_t vae_scale_factor) :
-    m_config(config), m_vae_scale_factor(vae_scale_factor) {
+                                           const size_t vae_scale_factor)
+    : m_config(config),
+      m_vae_scale_factor(vae_scale_factor) {
     ov::Core core = utils::singleton_core();
     m_model = core.read_model(model, weights);
 }
@@ -56,8 +56,8 @@ UNet2DConditionModel::UNet2DConditionModel(const std::string& model,
                                            const Config& config,
                                            const size_t vae_scale_factor,
                                            const std::string& device,
-                                           const ov::AnyMap& properties) :
-    UNet2DConditionModel(model, weights, config, vae_scale_factor) {
+                                           const ov::AnyMap& properties)
+    : UNet2DConditionModel(model, weights, config, vae_scale_factor) {
     compile(device, properties);
 }
 
@@ -67,7 +67,10 @@ const UNet2DConditionModel::Config& UNet2DConditionModel::get_config() const {
     return m_config;
 }
 
-UNet2DConditionModel& UNet2DConditionModel::reshape(int batch_size, int height, int width, int tokenizer_model_max_length) {
+UNet2DConditionModel& UNet2DConditionModel::reshape(int batch_size,
+                                                    int height,
+                                                    int width,
+                                                    int tokenizer_model_max_length) {
     OPENVINO_ASSERT(m_model, "Model has been already compiled. Cannot reshape already compiled model");
 
     height /= m_vae_scale_factor;
@@ -109,7 +112,7 @@ void UNet2DConditionModel::set_hidden_states(const std::string& tensor_name, ov:
 
 void UNet2DConditionModel::set_adapters(const std::optional<AdapterConfig>& adapters) {
     OPENVINO_ASSERT(m_impl, "UNet model must be compiled first");
-    if(adapters) {
+    if (adapters) {
         m_impl->set_adapters(m_adapter_controller, *adapters);
     }
 }
@@ -119,5 +122,5 @@ ov::Tensor UNet2DConditionModel::infer(ov::Tensor sample, ov::Tensor timestep) {
     return m_impl->infer(sample, timestep);
 }
 
-} // namespace genai
-} // namespace ov
+}  // namespace genai
+}  // namespace ov

@@ -1,24 +1,25 @@
 // Copyright (C) 2023-2024 Intel Corporation
 // SPDX-License-Identifier: Apache-2.0
 
-#include <filesystem>
+#include <pybind11/functional.h>
 #include <pybind11/pybind11.h>
 #include <pybind11/stl.h>
-#include <pybind11/stl_bind.h>
 #include <pybind11/stl/filesystem.h>
-#include <pybind11/functional.h>
+#include <pybind11/stl_bind.h>
+
+#include <filesystem>
 
 #include "py_utils.hpp"
 
 namespace py = pybind11;
 namespace pyutils = ov::genai::pybind::utils;
 
-using ov::genai::StopCriteria;
 using ov::genai::GenerationConfig;
+using ov::genai::StopCriteria;
 
 namespace {
 
-auto stop_criteria_docstring =  R"(
+auto stop_criteria_docstring = R"(
     StopCriteria controls the stopping condition for grouped beam search.
     
     The following values are possible:
@@ -27,7 +28,7 @@ auto stop_criteria_docstring =  R"(
         "openvino_genai.StopCriteria.NEVER" stops when there cannot be better candidates.
 )";
 
-} // namespace
+}  // namespace
 
 char generation_config_docstring[] = R"(
     Structure to keep generation config parameters. For a selected method of decoding, only parameters from that group 
@@ -78,10 +79,12 @@ void init_generation_config(py::module_& m) {
         .value("HEURISTIC", StopCriteria::HEURISTIC)
         .value("NEVER", StopCriteria::NEVER);
 
-     // Binding for GenerationConfig
+    // Binding for GenerationConfig
     py::class_<GenerationConfig>(m, "GenerationConfig", generation_config_docstring)
         .def(py::init<std::filesystem::path>(), py::arg("json_path"), "path where generation_config.json is stored")
-        .def(py::init([](py::kwargs kwargs) { return *pyutils::update_config_from_kwargs(GenerationConfig(), kwargs); }))
+        .def(py::init([](py::kwargs kwargs) {
+            return *pyutils::update_config_from_kwargs(GenerationConfig(), kwargs);
+        }))
         .def_readwrite("max_new_tokens", &GenerationConfig::max_new_tokens)
         .def_readwrite("max_length", &GenerationConfig::max_length)
         .def_readwrite("ignore_eos", &GenerationConfig::ignore_eos)
@@ -116,5 +119,8 @@ void init_generation_config(py::module_& m) {
         .def("is_greedy_decoding", &GenerationConfig::is_greedy_decoding)
         .def("is_assisting_generation", &GenerationConfig::is_assisting_generation)
         .def("is_prompt_lookup", &GenerationConfig::is_prompt_lookup)
-        .def("update_generation_config", static_cast<void (GenerationConfig::*)(const ov::AnyMap&)>(&ov::genai::GenerationConfig::update_generation_config), py::arg("config_map"));
-   }
+        .def("update_generation_config",
+             static_cast<void (GenerationConfig::*)(const ov::AnyMap&)>(
+                 &ov::genai::GenerationConfig::update_generation_config),
+             py::arg("config_map"));
+}

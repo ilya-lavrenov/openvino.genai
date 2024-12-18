@@ -2,8 +2,9 @@
 // SPDX-License-Identifier: Apache-2.0
 
 #include "vision_encoder.hpp"
-#include "visual_language/clip.hpp"
+
 #include "utils.hpp"
+#include "visual_language/clip.hpp"
 
 using namespace ov::genai;
 
@@ -15,11 +16,9 @@ namespace {
  * @return A clip_image_u8 structure containing the image data.
  */
 clip_image_u8 tensor_to_clip_image_u8(const ov::Tensor& image_tensor) {
-    clip_image_u8 image{
-        int(image_tensor.get_shape().at(2)),
-        int(image_tensor.get_shape().at(1)),
-        {image_tensor.data<uint8_t>(), image_tensor.data<uint8_t>() + image_tensor.get_size()}
-    };
+    clip_image_u8 image{int(image_tensor.get_shape().at(2)),
+                        int(image_tensor.get_shape().at(1)),
+                        {image_tensor.data<uint8_t>(), image_tensor.data<uint8_t>() + image_tensor.get_size()}};
     return image;
 }
 
@@ -30,10 +29,7 @@ clip_image_u8 tensor_to_clip_image_u8(const ov::Tensor& image_tensor) {
  * @return An OpenVINO tensor containing the image data (1CHW).
  */
 ov::Tensor clip_image_f32_to_tensor(const clip_image_f32& image) {
-    ov::Tensor image_tensor{
-        ov::element::f32,
-        {1, 3, static_cast<size_t>(image.ny), static_cast<size_t>(image.nx)}
-    };
+    ov::Tensor image_tensor{ov::element::f32, {1, 3, static_cast<size_t>(image.ny), static_cast<size_t>(image.nx)}};
     std::memcpy(image_tensor.data<float>(), image.buf.data(), image.buf.size() * sizeof(float));
     return image_tensor;
 }
@@ -42,7 +38,10 @@ int ensure_divide(int length, int patch_size) {
     return std::max(static_cast<int>(std::round(static_cast<float>(length) / patch_size) * patch_size), patch_size);
 }
 
-std::pair<int, int> find_best_resize(std::pair<int, int> original_size, int scale_resolution, int patch_size, bool allow_upscale=false) {
+std::pair<int, int> find_best_resize(std::pair<int, int> original_size,
+                                     int scale_resolution,
+                                     int patch_size,
+                                     bool allow_upscale = false) {
     int width = original_size.first;
     int height = original_size.second;
     if ((width * height > scale_resolution * scale_resolution) || allow_upscale) {
@@ -55,7 +54,11 @@ std::pair<int, int> find_best_resize(std::pair<int, int> original_size, int scal
     return std::make_pair(best_width, best_height);
 }
 
-std::pair<int, int> get_refine_size(std::pair<int, int> original_size, std::pair<int, int> grid, int scale_resolution, int patch_size, bool allow_upscale) {
+std::pair<int, int> get_refine_size(std::pair<int, int> original_size,
+                                    std::pair<int, int> grid,
+                                    int scale_resolution,
+                                    int patch_size,
+                                    bool allow_upscale) {
     int width, height;
     std::tie(width, height) = original_size;
     int grid_x, grid_y;
@@ -67,7 +70,8 @@ std::pair<int, int> get_refine_size(std::pair<int, int> original_size, std::pair
     int grid_width = refine_width / grid_x;
     int grid_height = refine_height / grid_y;
 
-    auto best_grid_size = find_best_resize(std::make_pair(grid_width, grid_height), scale_resolution, patch_size, allow_upscale);
+    auto best_grid_size =
+        find_best_resize(std::make_pair(grid_width, grid_height), scale_resolution, patch_size, allow_upscale);
     int best_grid_width, best_grid_height;
     std::tie(best_grid_width, best_grid_height) = best_grid_size;
 
@@ -75,7 +79,11 @@ std::pair<int, int> get_refine_size(std::pair<int, int> original_size, std::pair
     return refine_size;
 }
 
-std::vector<std::vector<clip_image_u8>> slice_image(const clip_image_u8& img, const int max_slice_nums, const int scale_resolution, const int patch_size, const bool never_split) {
+std::vector<std::vector<clip_image_u8>> slice_image(const clip_image_u8& img,
+                                                    const int max_slice_nums,
+                                                    const int scale_resolution,
+                                                    const int patch_size,
+                                                    const bool never_split) {
     const std::pair<int, int> original_size{img.nx, img.ny};
     const int original_width = img.nx;
     const int original_height = img.ny;
@@ -90,9 +98,7 @@ std::vector<std::vector<clip_image_u8>> slice_image(const clip_image_u8& img, co
         auto best_size = find_best_resize(original_size, scale_resolution, patch_size, true);
         images.back().push_back(clip_image_u8{});
         bicubic_resize(img, images.back().back(), best_size.first, best_size.second);
-    }
-    else if (multiple > 1) {
-
+    } else if (multiple > 1) {
         std::vector<int> candidate_split_grids_nums;
         for (int i : {multiple - 1, multiple, multiple + 1}) {
             if (i == 1 || i > max_slice_nums) {
@@ -117,7 +123,7 @@ std::vector<std::vector<clip_image_u8>> slice_image(const clip_image_u8& img, co
             }
         }
 
-        std::pair<int, int> best_grid{ 1, 1 };
+        std::pair<int, int> best_grid{1, 1};
         float min_error = std::numeric_limits<float>::infinity();
 
         for (const auto& grid : candidate_grids) {
@@ -172,7 +178,8 @@ ov::Tensor unfold(const ov::Tensor& images_tensor, size_t kernel) {
     const size_t images_h = images_shape.at(2);
     const size_t images_w = images_shape.at(3);
 
-    OPENVINO_ASSERT(images_h >= kernel && images_w >= kernel, "Input height and width must be greater than or equal to kernel size.");
+    OPENVINO_ASSERT(images_h >= kernel && images_w >= kernel,
+                    "Input height and width must be greater than or equal to kernel size.");
 
     const size_t new_c = images_c * kernel * kernel;
     const size_t output_h = (images_h - kernel) / kernel + 1;
@@ -192,14 +199,11 @@ ov::Tensor unfold(const ov::Tensor& images_tensor, size_t kernel) {
                     for (size_t kh = 0; kh < kernel; ++kh) {
                         for (size_t kw = 0; kw < kernel; ++kw) {
                             size_t input_idx = (batch_idx * images_c * images_h * images_w) +
-                                               (c_idx * images_h * images_w) +
-                                               ((h_idx + kh) * images_w) +
-                                               (w_idx + kw);
+                                               (c_idx * images_h * images_w) + ((h_idx + kh) * images_w) + (w_idx + kw);
 
                             size_t unfolded_c_idx = (c_idx * kernel * kernel) + (kh * kernel) + kw;
                             size_t unfolded_idx = (batch_idx * new_c * kernels_per_plane) +
-                                                  unfolded_c_idx * kernels_per_plane +
-                                                  (h_out * output_w + w_out);
+                                                  unfolded_c_idx * kernels_per_plane + (h_out * output_w + w_out);
 
                             unfolded[unfolded_idx] = images[input_idx];
                         }
@@ -230,13 +234,10 @@ ov::Tensor preprocess_for_encoder(const ov::Tensor& images, size_t kernel) {
             for (size_t k1_idx = 0; k1_idx < kernel; ++k1_idx) {
                 for (size_t d2_idx = 0; d2_idx < d2; ++d2_idx) {
                     for (size_t k2_idx = 0; k2_idx < kernel; ++k2_idx) {
-                        size_t unfolded_idx = b_idx * d1 * d2 +
-                                            (c_idx * kernel * kernel + k1_idx * kernel + k2_idx) * d2 +
-                                            d2_idx;
-                        size_t permuted_idx = b_idx * channels * kernel * new_len +
-                                            c_idx * kernel * new_len +
-                                            k1_idx * new_len +
-                                            d2_idx * kernel + k2_idx;
+                        size_t unfolded_idx =
+                            b_idx * d1 * d2 + (c_idx * kernel * kernel + k1_idx * kernel + k2_idx) * d2 + d2_idx;
+                        size_t permuted_idx = b_idx * channels * kernel * new_len + c_idx * kernel * new_len +
+                                              k1_idx * new_len + d2_idx * kernel + k2_idx;
                         permuted[permuted_idx] = unfolded[unfolded_idx];
                     }
                 }
@@ -247,21 +248,24 @@ ov::Tensor preprocess_for_encoder(const ov::Tensor& images, size_t kernel) {
 }
 
 // torch.bucketize(fractional_coords, boundaries, right=True)
-std::vector<int64_t> bucket_size_right(const std::vector<float>& fractional_coords, const std::vector<float>& boundaries) {
+std::vector<int64_t> bucket_size_right(const std::vector<float>& fractional_coords,
+                                       const std::vector<float>& boundaries) {
     std::vector<int64_t> bucket_coords(fractional_coords.size());
-    std::transform(fractional_coords.begin(), fractional_coords.end(), bucket_coords.begin(), [&boundaries](float fractional_coord) {
-        return std::distance(boundaries.begin(), std::upper_bound(boundaries.begin(), boundaries.end(), fractional_coord));
-    });
+    std::transform(fractional_coords.begin(),
+                   fractional_coords.end(),
+                   bucket_coords.begin(),
+                   [&boundaries](float fractional_coord) {
+                       return std::distance(boundaries.begin(),
+                                            std::upper_bound(boundaries.begin(), boundaries.end(), fractional_coord));
+                   });
     return bucket_coords;
 }
 
-ov::Tensor prepare_vis_position_ids(
-    const ov::Tensor& pixel_values,
-    const ov::Tensor& patch_attention_mask,
-    const std::vector<ImageSize> tgt_sizes,
-    size_t patch_size,
-    size_t num_patches_per_side
-) {
+ov::Tensor prepare_vis_position_ids(const ov::Tensor& pixel_values,
+                                    const ov::Tensor& patch_attention_mask,
+                                    const std::vector<ImageSize> tgt_sizes,
+                                    size_t patch_size,
+                                    size_t num_patches_per_side) {
     size_t batch_size = pixel_values.get_shape().at(0);
     size_t max_im_h = pixel_values.get_shape().at(2), max_im_w = pixel_values.get_shape().at(3);
     size_t max_nb_patches_h = max_im_h / patch_size, max_nb_patches_w = max_im_w / patch_size;
@@ -280,23 +284,29 @@ ov::Tensor prepare_vis_position_ids(
         size_t nb_patches_w = tgt_sizes.at(batch_idx).width;
 
         std::vector<float> fractional_coords_h(nb_patches_h);
-        std::generate(fractional_coords_h.begin(), fractional_coords_h.end(), [nb_patches_h, val = -1.0f / nb_patches_h]() mutable {
-            val += 1.0f / nb_patches_h;
-            return val;
-        });
+        std::generate(fractional_coords_h.begin(),
+                      fractional_coords_h.end(),
+                      [nb_patches_h, val = -1.0f / nb_patches_h]() mutable {
+                          val += 1.0f / nb_patches_h;
+                          return val;
+                      });
         std::vector<float> fractional_coords_w(nb_patches_w);
-        std::generate(fractional_coords_w.begin(), fractional_coords_w.end(), [nb_patches_w, val = -1.0f / nb_patches_w]() mutable {
-            val += 1.0f / nb_patches_w;
-            return val;
-        });
+        std::generate(fractional_coords_w.begin(),
+                      fractional_coords_w.end(),
+                      [nb_patches_w, val = -1.0f / nb_patches_w]() mutable {
+                          val += 1.0f / nb_patches_w;
+                          return val;
+                      });
 
         std::vector<int64_t> bucket_coords_h = bucket_size_right(fractional_coords_h, boundaries);
         std::vector<int64_t> bucket_coords_w = bucket_size_right(fractional_coords_w, boundaries);
 
         std::vector<int64_t> pos_ids(bucket_coords_h.size() * bucket_coords_w.size());
         for (size_t col = 0; col < bucket_coords_h.size(); ++col) {
-            for (size_t row = 0; row < bucket_coords_w.size(); ++row) {;
-                pos_ids.at(col * bucket_coords_w.size() + row) = bucket_coords_h.at(col) * num_patches_per_side + bucket_coords_w.at(row);
+            for (size_t row = 0; row < bucket_coords_w.size(); ++row) {
+                ;
+                pos_ids.at(col * bucket_coords_w.size() + row) =
+                    bucket_coords_h.at(col) * num_patches_per_side + bucket_coords_w.at(row);
             }
         }
         std::copy(pos_ids.begin(), pos_ids.end(), res_data + batch_idx * position_ids_batch_elem);
@@ -304,35 +314,48 @@ ov::Tensor prepare_vis_position_ids(
     return position_ids;
 }
 
-EncodedImage llava_image_embed_make_with_bytes_slice(clip_ctx& ctx_clip, const ov::Tensor& img, ov::InferRequest& encoder, int max_slice_nums, int scale_resolution, size_t patch_size, bool never_split) {
+EncodedImage llava_image_embed_make_with_bytes_slice(clip_ctx& ctx_clip,
+                                                     const ov::Tensor& img,
+                                                     ov::InferRequest& encoder,
+                                                     int max_slice_nums,
+                                                     int scale_resolution,
+                                                     size_t patch_size,
+                                                     bool never_split) {
     clip_image_u8 source = tensor_to_clip_image_u8(img);
-    std::vector<std::vector<clip_image_u8>> imgs = ::slice_image(source, max_slice_nums, scale_resolution, patch_size, never_split);
+    std::vector<std::vector<clip_image_u8>> imgs =
+        ::slice_image(source, max_slice_nums, scale_resolution, patch_size, never_split);
     std::vector<std::vector<ov::Tensor>> results;
     std::vector<std::vector<ImageSize>> sizes;
     const size_t channels = 3;
 
     std::vector<std::vector<clip_image_f32>> preprocessed{imgs.size()};
     size_t max_h = 0, max_w = 0, n_images = 0, max_size = 0;
-    std::transform(imgs.begin(), imgs.end(), preprocessed.begin(), [&ctx_clip, &max_h, &max_w, &max_size, &n_images](const std::vector<clip_image_u8>& row) {
-        std::vector<clip_image_f32> processed_row{row.size()};
-        std::transform(row.begin(), row.end(), processed_row.begin(), [&ctx_clip, &max_h, &max_w, &max_size, &n_images](const clip_image_u8& raw) {
-            clip_image_f32 im = clip_image_preprocess(ctx_clip, raw);
-            if (size_t(im.ny) * size_t(im.nx) > max_size) {
-                max_size = size_t(im.ny) * size_t(im.nx);
-                max_h = size_t(im.ny);
-                max_w = size_t(im.nx);
-            }
-            ++n_images;
-            return im;
-        });
-        return processed_row;
-    });
+    std::transform(imgs.begin(),
+                   imgs.end(),
+                   preprocessed.begin(),
+                   [&ctx_clip, &max_h, &max_w, &max_size, &n_images](const std::vector<clip_image_u8>& row) {
+                       std::vector<clip_image_f32> processed_row{row.size()};
+                       std::transform(row.begin(),
+                                      row.end(),
+                                      processed_row.begin(),
+                                      [&ctx_clip, &max_h, &max_w, &max_size, &n_images](const clip_image_u8& raw) {
+                                          clip_image_f32 im = clip_image_preprocess(ctx_clip, raw);
+                                          if (size_t(im.ny) * size_t(im.nx) > max_size) {
+                                              max_size = size_t(im.ny) * size_t(im.nx);
+                                              max_h = size_t(im.ny);
+                                              max_w = size_t(im.nx);
+                                          }
+                                          ++n_images;
+                                          return im;
+                                      });
+                       return processed_row;
+                   });
 
     ov::Tensor pixel_values{ov::element::f32, {n_images, channels, patch_size, max_size / patch_size}};
     size_t d3_all_pixel = pixel_values.get_shape().at(3);
     float* pixel_value_data = pixel_values.data<float>();
-    
-    //image chw to 1*c*kernel*hw/kernel and padding zero
+
+    // image chw to 1*c*kernel*hw/kernel and padding zero
     clip_image_f32& resized_preprocessed = preprocessed.at(0).at(0);
     size_t img_h = resized_preprocessed.ny;
     size_t img_w = resized_preprocessed.nx;
@@ -346,7 +369,7 @@ EncodedImage llava_image_embed_make_with_bytes_slice(clip_ctx& ctx_clip, const o
         for (size_t k_idx = 0; k_idx < patch_size; k_idx++) {
             std::copy(clip_value_data, clip_value_data + d3_clip_pixel, pixel_value_data);
             clip_value_data += d3_clip_pixel;
-            pixel_value_data += d3_all_pixel; 
+            pixel_value_data += d3_all_pixel;
         }
     }
 
@@ -359,7 +382,7 @@ EncodedImage llava_image_embed_make_with_bytes_slice(clip_ctx& ctx_clip, const o
                 img_w = elem.nx;
                 ov::Tensor clip_img{ov::element::f32, {1, channels, img_h, img_w}, elem.buf.data()};
                 ov::Tensor clip_pixel_values = preprocess_for_encoder(clip_img, patch_size);
-                
+
                 d3_clip_pixel = clip_pixel_values.get_shape().at(3);
                 clip_value_data = clip_pixel_values.data<float>();
                 pixel_value_data = pixel_values.data<float>() + batch_pixel * channels * patch_size * d3_all_pixel;
@@ -376,7 +399,8 @@ EncodedImage llava_image_embed_make_with_bytes_slice(clip_ctx& ctx_clip, const o
     }
     encoder.set_tensor("pixel_values", pixel_values);
 
-    ov::Tensor patch_attention_mask{ov::element::f32, {pixel_values.get_shape().at(0), 1, max_h / patch_size * max_w / patch_size}};
+    ov::Tensor patch_attention_mask{ov::element::f32,
+                                    {pixel_values.get_shape().at(0), 1, max_h / patch_size * max_w / patch_size}};
     float* attention_data = patch_attention_mask.data<float>();
     std::fill_n(attention_data, patch_attention_mask.get_size(), 0.0f);
     std::fill_n(attention_data, resized_preprocessed.ny / patch_size * resized_preprocessed.nx / patch_size, 1.0f);
@@ -385,7 +409,9 @@ EncodedImage llava_image_embed_make_with_bytes_slice(clip_ctx& ctx_clip, const o
             size_t n_slices = preprocessed.at(row).size();
             for (size_t col = 0; col < n_slices; ++col) {
                 const clip_image_f32& elem = preprocessed.at(row).at(col);
-                std::fill_n(attention_data + ((row - 1) * n_slices + col + 1) * max_h / patch_size * max_w / patch_size, elem.ny / patch_size * elem.nx / patch_size, 1.0f);
+                std::fill_n(attention_data + ((row - 1) * n_slices + col + 1) * max_h / patch_size * max_w / patch_size,
+                            elem.ny / patch_size * elem.nx / patch_size,
+                            1.0f);
             }
         }
     }
@@ -400,7 +426,11 @@ EncodedImage llava_image_embed_make_with_bytes_slice(clip_ctx& ctx_clip, const o
             }
         }
     }
-    ov::Tensor position_ids = prepare_vis_position_ids(pixel_values, patch_attention_mask, tgt_sizes, patch_size, ctx_clip.image_size / patch_size);
+    ov::Tensor position_ids = prepare_vis_position_ids(pixel_values,
+                                                       patch_attention_mask,
+                                                       tgt_sizes,
+                                                       patch_size,
+                                                       ctx_clip.image_size / patch_size);
     encoder.set_tensor("position_ids", position_ids);
     encoder.infer();
     const ov::Tensor& output_tensor = encoder.get_output_tensor();
@@ -413,26 +443,27 @@ EncodedImage llava_image_embed_make_with_bytes_slice(clip_ctx& ctx_clip, const o
 
     size_t old_hidden_size = output_tensor.get_shape().at(2);
     const float* out = output_tensor.data<float>();
-    ov::Tensor resized_source{ov::element::f32, {1, resized_source_size.height * resized_source_size.width, old_hidden_size}};
+    ov::Tensor resized_source{ov::element::f32,
+                              {1, resized_source_size.height * resized_source_size.width, old_hidden_size}};
     std::copy_n(out, resized_source.get_size(), resized_source.data<float>());
 
     size_t n_patches = tgt_sizes.at(1).height * tgt_sizes.at(1).width;
-    ov::Tensor encoded_slices{ov::element::f32, {preprocessed.size() - 1, preprocessed.at(1).size(), n_patches, old_hidden_size}};
+    ov::Tensor encoded_slices{ov::element::f32,
+                              {preprocessed.size() - 1, preprocessed.at(1).size(), n_patches, old_hidden_size}};
     for (size_t col = 0; col < preprocessed.size() - 1; ++col) {
         for (size_t row = 0; row < preprocessed.at(1).size(); ++row) {
-            std::copy_n(out + (col * preprocessed.at(1).size() + row + 1) * n_patches * old_hidden_size, n_patches * old_hidden_size, encoded_slices.data<float>() + (col * preprocessed.at(1).size() + row) * n_patches * old_hidden_size);
+            std::copy_n(
+                out + (col * preprocessed.at(1).size() + row + 1) * n_patches * old_hidden_size,
+                n_patches * old_hidden_size,
+                encoded_slices.data<float>() + (col * preprocessed.at(1).size() + row) * n_patches * old_hidden_size);
         }
     }
     return {resized_source, resized_source_size, encoded_slices, tgt_sizes.at(1)};
 }
 
-ProcessorConfig from_any_map(
-    const ov::AnyMap& config_map,
-    const ProcessorConfig& initial
-) {
+ProcessorConfig from_any_map(const ov::AnyMap& config_map, const ProcessorConfig& initial) {
     auto iter = config_map.find("processor_config");
-    ProcessorConfig extracted_config = config_map.end() != iter ?
-        iter->second.as<ProcessorConfig>() : initial;
+    ProcessorConfig extracted_config = config_map.end() != iter ? iter->second.as<ProcessorConfig>() : initial;
     using utils::read_anymap_param;
     read_anymap_param(config_map, "patch_size", extracted_config.patch_size);
     read_anymap_param(config_map, "scale_resolution", extracted_config.scale_resolution);
@@ -473,7 +504,7 @@ clip_image_f32 preprocess_clip_image_llava(const clip_image_u8& image, const Pro
         for (int y = 0; y < crop_height; ++y) {
             for (int x = 0; x < crop_width; ++x) {
                 for (int c = 0; c < 3; ++c) {
-                    cropped_image.buf[(y * crop_width + x) * 3 + c] = 
+                    cropped_image.buf[(y * crop_width + x) * 3 + c] =
                         resized_image.buf[((start_y + y) * resized_image.nx + (start_x + x)) * 3 + c];
                 }
             }
@@ -529,13 +560,11 @@ ov::Tensor get_pixel_values_llava_next(const ov::Tensor& image, const ProcessorC
     return concatenated_tensor;
 }
 
-std::vector<clip_image_u8> split_image_internvl(
-    const clip_image_u8& image,
-    int image_size,
-    int min_num = 1,
-    int max_num = 12,
-    bool use_thumbnail = true
-) {
+std::vector<clip_image_u8> split_image_internvl(const clip_image_u8& image,
+                                                int image_size,
+                                                int min_num = 1,
+                                                int max_num = 12,
+                                                bool use_thumbnail = true) {
     int orig_width = image.nx;
     int orig_height = image.ny;
     float aspect_ratio = static_cast<float>(orig_width) / orig_height;
@@ -550,8 +579,9 @@ std::vector<clip_image_u8> split_image_internvl(
             }
         }
     }
-    std::sort(target_ratios.begin(), target_ratios.end(),
-        [](const auto& a, const auto& b) { return a.first * a.second < b.first * b.second; });
+    std::sort(target_ratios.begin(), target_ratios.end(), [](const auto& a, const auto& b) {
+        return a.first * a.second < b.first * b.second;
+    });
 
     auto find_closest_aspect_ratio = [&](float ar, const std::vector<std::pair<int, int>>& ratios) {
         float best_ratio_diff = std::numeric_limits<float>::max();
@@ -564,7 +594,8 @@ std::vector<clip_image_u8> split_image_internvl(
             if (ratio_diff < best_ratio_diff) {
                 best_ratio_diff = ratio_diff;
                 best_ratio = ratio;
-            } else if (ratio_diff == best_ratio_diff && area > 0.5 * image_size * image_size * ratio.first * ratio.second) {
+            } else if (ratio_diff == best_ratio_diff &&
+                       area > 0.5 * image_size * image_size * ratio.first * ratio.second) {
                 best_ratio = ratio;
             }
         }
@@ -644,10 +675,13 @@ ov::Tensor get_pixel_values_internvl(const ov::Tensor& image, const ProcessorCon
     }
     return output_tensor;
 }
-}
+}  // namespace
 
-VisionEncoder::VisionEncoder(const std::filesystem::path& model_dir, const VLMModelType model_type, const std::string& device, const ov::AnyMap device_config) :
-    model_type(model_type) {
+VisionEncoder::VisionEncoder(const std::filesystem::path& model_dir,
+                             const VLMModelType model_type,
+                             const std::string& device,
+                             const ov::AnyMap device_config)
+    : model_type(model_type) {
     auto compiled_model = utils::singleton_core().compile_model(model_dir / "openvino_vision_embeddings_model.xml",
                                                                 device,
                                                                 device_config);
@@ -656,19 +690,17 @@ VisionEncoder::VisionEncoder(const std::filesystem::path& model_dir, const VLMMo
     m_processor_config = utils::from_config_json_if_exists<ProcessorConfig>(model_dir, "preprocessor_config.json");
 }
 
-VisionEncoder::VisionEncoder(
-    const std::string& model,
-    const ov::Tensor& weights,
-    const std::filesystem::path& config_dir_path,
-    const VLMModelType model_type,
-    const std::string& device,
-    const ov::AnyMap device_config
-) :
-    model_type(model_type) {
-        m_vision_encoder = utils::singleton_core().compile_model(model, weights, device, device_config).create_infer_request();
-        m_processor_config = utils::from_config_json_if_exists<ProcessorConfig>(
-            config_dir_path, "preprocessor_config.json"
-        );
+VisionEncoder::VisionEncoder(const std::string& model,
+                             const ov::Tensor& weights,
+                             const std::filesystem::path& config_dir_path,
+                             const VLMModelType model_type,
+                             const std::string& device,
+                             const ov::AnyMap device_config)
+    : model_type(model_type) {
+    m_vision_encoder =
+        utils::singleton_core().compile_model(model, weights, device, device_config).create_infer_request();
+    m_processor_config =
+        utils::from_config_json_if_exists<ProcessorConfig>(config_dir_path, "preprocessor_config.json");
 }
 
 EncodedImage VisionEncoder::encode(const ov::Tensor& image, const ProcessorConfig& config) {
@@ -678,7 +710,7 @@ EncodedImage VisionEncoder::encode(const ov::Tensor& image, const ProcessorConfi
         return encode_llava(image, config);
     } else if (model_type == VLMModelType::LLAVA_NEXT) {
         return encode_llava_next(image, config);
-    }  else if (model_type == VLMModelType::INTERNVL_CHAT) {
+    } else if (model_type == VLMModelType::INTERNVL_CHAT) {
         return encode_internvl(image, config);
     } else {
         OPENVINO_THROW("Unsupported type of VisionEncoder");
@@ -686,9 +718,7 @@ EncodedImage VisionEncoder::encode(const ov::Tensor& image, const ProcessorConfi
 }
 
 EncodedImage VisionEncoder::encode(const ov::Tensor& image, const ov::AnyMap& config_map) {
-    return encode(image, from_any_map(
-        config_map, m_processor_config
-    ));
+    return encode(image, from_any_map(config_map, m_processor_config));
 }
 
 EncodedImage VisionEncoder::encode_minicpm(const ov::Tensor& image, const ProcessorConfig& config) {
@@ -696,7 +726,13 @@ EncodedImage VisionEncoder::encode_minicpm(const ov::Tensor& image, const Proces
     ctx_clip.image_size = m_processor_config.image_size;
     std::copy(config.norm_mean.begin(), config.norm_mean.end(), ctx_clip.image_mean);
     std::copy(config.norm_std.begin(), config.norm_std.end(), ctx_clip.image_std);
-    return llava_image_embed_make_with_bytes_slice(ctx_clip, image, m_vision_encoder, config.max_slice_nums, config.scale_resolution, config.patch_size, 0 == config.max_slice_nums);
+    return llava_image_embed_make_with_bytes_slice(ctx_clip,
+                                                   image,
+                                                   m_vision_encoder,
+                                                   config.max_slice_nums,
+                                                   config.scale_resolution,
+                                                   config.patch_size,
+                                                   0 == config.max_slice_nums);
 }
 
 EncodedImage VisionEncoder::encode_llava(const ov::Tensor& image, const ProcessorConfig& config) {
@@ -709,7 +745,8 @@ EncodedImage VisionEncoder::encode_llava(const ov::Tensor& image, const Processo
     ov::Tensor image_features(infer_output.get_element_type(), infer_output.get_shape());
     std::memcpy(image_features.data(), infer_output.data(), infer_output.get_byte_size());
 
-    ImageSize resized_source_size{config.crop_size_height / config.patch_size, config.crop_size_width / config.patch_size};
+    ImageSize resized_source_size{config.crop_size_height / config.patch_size,
+                                  config.crop_size_width / config.patch_size};
 
     return {std::move(image_features), resized_source_size};
 }
@@ -724,11 +761,13 @@ EncodedImage VisionEncoder::encode_llava_next(const ov::Tensor& image, const Pro
     ov::Tensor image_features(infer_output.get_element_type(), infer_output.get_shape());
     std::memcpy(image_features.data(), infer_output.data(), infer_output.get_byte_size());
 
-    ImageSize resized_source_size{config.crop_size_height / config.patch_size, config.crop_size_width / config.patch_size};
+    ImageSize resized_source_size{config.crop_size_height / config.patch_size,
+                                  config.crop_size_width / config.patch_size};
 
     // Gen number of patches
     ImageSize original_image_size{image.get_shape().at(1), image.get_shape().at(2)};
-    auto best_resolution = select_best_resolution({original_image_size.width, original_image_size.height}, config.image_grid_pinpoints);
+    auto best_resolution =
+        select_best_resolution({original_image_size.width, original_image_size.height}, config.image_grid_pinpoints);
     int num_patches_w = best_resolution.first / config.size_shortest_edge;
     int num_patches_h = best_resolution.second / config.size_shortest_edge;
 
@@ -749,7 +788,8 @@ EncodedImage VisionEncoder::encode_internvl(const ov::Tensor& image, const Proce
     ov::Tensor image_features(infer_output.get_element_type(), infer_output.get_shape());
     std::memcpy(image_features.data(), infer_output.data(), infer_output.get_byte_size());
 
-    ImageSize resized_source_size{config.crop_size_height / config.patch_size, config.crop_size_width / config.patch_size};
+    ImageSize resized_source_size{config.crop_size_height / config.patch_size,
+                                  config.crop_size_width / config.patch_size};
 
     return {std::move(image_features), resized_source_size};
 }

@@ -14,23 +14,21 @@ namespace genai {
 
 std::filesystem::path get_tokenizer_path_by_text_encoder(const std::filesystem::path& text_encoder_path);
 
-T5EncoderModel::T5EncoderModel(const std::filesystem::path& root_dir) :
-    m_tokenizer(get_tokenizer_path_by_text_encoder(root_dir)) {
+T5EncoderModel::T5EncoderModel(const std::filesystem::path& root_dir)
+    : m_tokenizer(get_tokenizer_path_by_text_encoder(root_dir)) {
     ov::Core core = utils::singleton_core();
     m_model = core.read_model((root_dir / "openvino_model.xml").string());
 }
 
 T5EncoderModel::T5EncoderModel(const std::filesystem::path& root_dir,
-                             const std::string& device,
-                             const ov::AnyMap& properties) :
-    T5EncoderModel(root_dir) {
+                               const std::string& device,
+                               const ov::AnyMap& properties)
+    : T5EncoderModel(root_dir) {
     compile(device, properties);
 }
 
-T5EncoderModel::T5EncoderModel(const std::string& model,
-                               const Tensor& weights,
-                               const Tokenizer& tokenizer) :
-    m_tokenizer(tokenizer) {
+T5EncoderModel::T5EncoderModel(const std::string& model, const Tensor& weights, const Tokenizer& tokenizer)
+    : m_tokenizer(tokenizer) {
     ov::Core core = utils::singleton_core();
     m_model = core.read_model(model, weights);
 }
@@ -39,8 +37,8 @@ T5EncoderModel::T5EncoderModel(const std::string& model,
                                const Tensor& weights,
                                const Tokenizer& tokenizer,
                                const std::string& device,
-                               const ov::AnyMap& properties) :
-    T5EncoderModel(model, weights, tokenizer) {
+                               const ov::AnyMap& properties)
+    : T5EncoderModel(model, weights, tokenizer) {
     compile(device, properties);
 }
 
@@ -71,7 +69,10 @@ T5EncoderModel& T5EncoderModel::compile(const std::string& device, const ov::Any
     return *this;
 }
 
-ov::Tensor T5EncoderModel::infer(const std::string& pos_prompt, const std::string& neg_prompt, bool do_classifier_free_guidance, int max_sequence_length) {
+ov::Tensor T5EncoderModel::infer(const std::string& pos_prompt,
+                                 const std::string& neg_prompt,
+                                 bool do_classifier_free_guidance,
+                                 int max_sequence_length) {
     OPENVINO_ASSERT(m_request, "T5 encoder model must be compiled first. Cannot infer non-compiled model");
 
     const int32_t pad_token_id = m_tokenizer.get_pad_token_id();
@@ -90,8 +91,11 @@ ov::Tensor T5EncoderModel::infer(const std::string& pos_prompt, const std::strin
     ov::Shape input_ids_shape = input_ids.get_shape();
 
     OPENVINO_ASSERT(input_ids_shape[1] == 0 || max_sequence_length == input_ids_shape[1],
-        "In case of T5EncoderModel was reshaped before, reshape's max_sequence_length ", input_ids_shape[1], " must be equal to ",
-        "infer's max_sequence_length ", max_sequence_length);
+                    "In case of T5EncoderModel was reshaped before, reshape's max_sequence_length ",
+                    input_ids_shape[1],
+                    " must be equal to ",
+                    "infer's max_sequence_length ",
+                    max_sequence_length);
 
     if (input_ids_shape[0] == 0 || input_ids_shape[1] == 0) {
         size_t batch_size = do_classifier_free_guidance ? 2 : 1;
@@ -100,18 +104,18 @@ ov::Tensor T5EncoderModel::infer(const std::string& pos_prompt, const std::strin
 
     size_t current_batch_idx = 0;
     if (do_classifier_free_guidance) {
-        perform_tokenization(neg_prompt,
-                             ov::Tensor(input_ids, {current_batch_idx    , 0},
-                                                   {current_batch_idx + 1, input_ids.get_shape()[1]}));
+        perform_tokenization(
+            neg_prompt,
+            ov::Tensor(input_ids, {current_batch_idx, 0}, {current_batch_idx + 1, input_ids.get_shape()[1]}));
         ++current_batch_idx;
     } else {
         // Negative prompt is ignored when --guidanceScale < 1.0
     }
 
     // perform_tokenization(pos_prompt, input_ids);
-    perform_tokenization(pos_prompt,
-                         ov::Tensor(input_ids, {current_batch_idx    , 0},
-                                               {current_batch_idx + 1, input_ids.get_shape()[1]}));
+    perform_tokenization(
+        pos_prompt,
+        ov::Tensor(input_ids, {current_batch_idx, 0}, {current_batch_idx + 1, input_ids.get_shape()[1]}));
 
     // text embeddings
     m_request.set_tensor("input_ids", input_ids);
@@ -124,5 +128,5 @@ ov::Tensor T5EncoderModel::get_output_tensor(const size_t idx) {
     return m_request.get_output_tensor(idx);
 }
 
-} // namespace genai
-} // namespace ov
+}  // namespace genai
+}  // namespace ov

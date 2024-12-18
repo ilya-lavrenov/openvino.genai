@@ -1,17 +1,16 @@
 // Copyright (C) 2023-2024 Intel Corporation
 // SPDX-License-Identifier: Apache-2.0
 
+#include "embedding_model.hpp"
+
 #include <fstream>
 #include <memory>
 
-#include "openvino/runtime/core.hpp"
 #include "openvino/core/preprocess/pre_post_process.hpp"
-#include "openvino/op/multiply.hpp"
 #include "openvino/op/constant.hpp"
-
+#include "openvino/op/multiply.hpp"
+#include "openvino/runtime/core.hpp"
 #include "utils.hpp"
-
-#include "embedding_model.hpp"
 
 namespace ov {
 namespace genai {
@@ -63,5 +62,5 @@ void EmbeddingsModel::merge_postprocess(std::shared_ptr<ov::Model> model, float 
     ppp.build();
 }
 
-} // namespace genai
-} // namespace ov
+}  // namespace genai
+}  // namespace ov

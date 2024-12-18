@@ -6,26 +6,23 @@
 #include <fstream>
 #include <memory>
 
-#include "openvino/runtime/core.hpp"
-#include "openvino/core/preprocess/pre_post_process.hpp"
-#include "openvino/op/clamp.hpp"
-#include "openvino/op/add.hpp"
-#include "openvino/op/multiply.hpp"
-#include "openvino/op/subtract.hpp"
-#include "openvino/op/constant.hpp"
-
-#include "utils.hpp"
-
 #include "json_utils.hpp"
 #include "lora_helper.hpp"
+#include "openvino/core/preprocess/pre_post_process.hpp"
+#include "openvino/op/add.hpp"
+#include "openvino/op/clamp.hpp"
+#include "openvino/op/constant.hpp"
+#include "openvino/op/multiply.hpp"
+#include "openvino/op/subtract.hpp"
+#include "openvino/runtime/core.hpp"
+#include "utils.hpp"
 
 namespace ov {
 namespace genai {
 
 class DiagonalGaussianDistribution {
 public:
-    explicit DiagonalGaussianDistribution(ov::Tensor parameters)
-        : m_parameters(parameters) {
+    explicit DiagonalGaussianDistribution(ov::Tensor parameters) : m_parameters(parameters) {
         ov::Shape shape = parameters.get_shape();
         OPENVINO_ASSERT(shape[0] == 1, "Batch size must be 1");
         shape[1] /= 2;
@@ -34,8 +31,8 @@ public:
         m_std = ov::Tensor(m_mean.get_element_type(), shape);
         ov::Tensor logvar(parameters.get_element_type(), shape, m_mean.data<float>() + m_mean.get_size());
 
-        float * logvar_data = logvar.data<float>();
-        float * std_data = m_std.data<float>();
+        float* logvar_data = logvar.data<float>();
+        float* std_data = m_std.data<float>();
 
         for (size_t i = 0; i < logvar.get_size(); ++i) {
             logvar_data[i] = std::min(std::max(logvar_data[i], -30.0f), 20.0f);
@@ -48,9 +45,9 @@ public:
 
         ov::Tensor rand_tensor = generator->randn_tensor(m_mean.get_shape());
 
-        float * rand_tensor_data = rand_tensor.data<float>();
-        const float * mean_data = m_mean.data<float>();
-        const float * std_data = m_std.data<float>();
+        float* rand_tensor_data = rand_tensor.data<float>();
+        const float* mean_data = m_mean.data<float>();
+        const float* std_data = m_std.data<float>();
 
         for (size_t i = 0; i < rand_tensor.get_size(); ++i) {
             rand_tensor_data[i] = mean_data[i] + std_data[i] * rand_tensor_data[i];
@@ -186,9 +183,9 @@ AutoencoderKL& AutoencoderKL::reshape(int batch_size, int height, int width) {
 
     const size_t vae_scale_factor = get_vae_scale_factor();
 
-    OPENVINO_ASSERT((height % vae_scale_factor == 0 || height < 0) &&
-            (width % vae_scale_factor == 0 || width < 0), "Both 'width' and 'height' must be divisible by ",
-            vae_scale_factor);
+    OPENVINO_ASSERT((height % vae_scale_factor == 0 || height < 0) && (width % vae_scale_factor == 0 || width < 0),
+                    "Both 'width' and 'height' must be divisible by ",
+                    vae_scale_factor);
 
     if (m_encoder_model) {
         ov::PartialShape input_shape = m_encoder_model->input(0).get_partial_shape();
@@ -257,7 +254,7 @@ ov::Tensor AutoencoderKL::encode(ov::Tensor image, std::shared_ptr<Generator> ge
     }
 
     // apply shift and scaling factor
-    float * latent_data = latent.data<float>();
+    float* latent_data = latent.data<float>();
     for (size_t i = 0; i < latent.get_size(); ++i) {
         latent_data[i] = (latent_data[i] - m_config.shift_factor) * m_config.scaling_factor;
     }
@@ -301,5 +298,5 @@ void AutoencoderKL::merge_vae_image_post_processing() const {
     ppp.build();
 }
 
-} // namespace genai
-} // namespace ov
+}  // namespace genai
+}  // namespace ov

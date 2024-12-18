@@ -17,7 +17,12 @@ std::filesystem::path get_tokenizer_path_by_text_encoder(const std::filesystem::
     std::string text_encoder_path_str = text_encoder_path.string();
 
     size_t pos = text_encoder_path_str.find(to_replace);
-    OPENVINO_ASSERT(pos != std::string::npos, "Failed to find '", to_replace, "' substring in '", text_encoder_path_str, "'");
+    OPENVINO_ASSERT(pos != std::string::npos,
+                    "Failed to find '",
+                    to_replace,
+                    "' substring in '",
+                    text_encoder_path_str,
+                    "'");
     text_encoder_path_str.replace(pos, to_replace.length(), replacement);
 
     return text_encoder_path_str;
@@ -34,25 +39,26 @@ CLIPTextModel::Config::Config(const std::filesystem::path& config_path) {
     read_json_param(data, "num_hidden_layers", num_hidden_layers);
 }
 
-CLIPTextModel::CLIPTextModel(const std::filesystem::path& root_dir) :
-    m_clip_tokenizer(get_tokenizer_path_by_text_encoder(root_dir)),
-    m_config(root_dir / "config.json") {
+CLIPTextModel::CLIPTextModel(const std::filesystem::path& root_dir)
+    : m_clip_tokenizer(get_tokenizer_path_by_text_encoder(root_dir)),
+      m_config(root_dir / "config.json") {
     ov::Core core = utils::singleton_core();
     m_model = core.read_model((root_dir / "openvino_model.xml").string());
 }
 
 CLIPTextModel::CLIPTextModel(const std::filesystem::path& root_dir,
                              const std::string& device,
-                             const ov::AnyMap& properties) :
-    CLIPTextModel(root_dir) {
+                             const ov::AnyMap& properties)
+    : CLIPTextModel(root_dir) {
     compile(device, properties);
 }
 
 CLIPTextModel::CLIPTextModel(const std::string& model,
                              const Tensor& weights,
                              const Config& config,
-                             const Tokenizer& clip_tokenizer) :
-    m_clip_tokenizer(clip_tokenizer), m_config(config) {
+                             const Tokenizer& clip_tokenizer)
+    : m_clip_tokenizer(clip_tokenizer),
+      m_config(config) {
     ov::Core core = utils::singleton_core();
     m_model = core.read_model(model, weights);
 }
@@ -62,8 +68,8 @@ CLIPTextModel::CLIPTextModel(const std::string& model,
                              const Config& config,
                              const Tokenizer& clip_tokenizer,
                              const std::string& device,
-                             const ov::AnyMap& properties) :
-    CLIPTextModel(model, weights, config, clip_tokenizer) {
+                             const ov::AnyMap& properties)
+    : CLIPTextModel(model, weights, config, clip_tokenizer) {
     compile(device, properties);
 }
 
@@ -111,7 +117,9 @@ void CLIPTextModel::set_adapters(const std::optional<AdapterConfig>& adapters) {
     }
 }
 
-ov::Tensor CLIPTextModel::infer(const std::string& pos_prompt, const std::string& neg_prompt, bool do_classifier_free_guidance) {
+ov::Tensor CLIPTextModel::infer(const std::string& pos_prompt,
+                                const std::string& neg_prompt,
+                                bool do_classifier_free_guidance) {
     OPENVINO_ASSERT(m_request, "CLIP text encoder model must be compiled first. Cannot infer non-compiled model");
 
     const int32_t pad_token_id = m_clip_tokenizer.get_pad_token_id();
@@ -128,17 +136,17 @@ ov::Tensor CLIPTextModel::infer(const std::string& pos_prompt, const std::string
     size_t current_batch_idx = 0;
 
     if (do_classifier_free_guidance) {
-        perform_tokenization(neg_prompt,
-                             ov::Tensor(input_ids, {current_batch_idx    , 0},
-                                                   {current_batch_idx + 1, m_config.max_position_embeddings}));
+        perform_tokenization(
+            neg_prompt,
+            ov::Tensor(input_ids, {current_batch_idx, 0}, {current_batch_idx + 1, m_config.max_position_embeddings}));
         ++current_batch_idx;
     } else {
         // Negative prompt is ignored when --guidanceScale < 1.0
     }
 
-    perform_tokenization(pos_prompt,
-                         ov::Tensor(input_ids, {current_batch_idx    , 0},
-                                               {current_batch_idx + 1, m_config.max_position_embeddings}));
+    perform_tokenization(
+        pos_prompt,
+        ov::Tensor(input_ids, {current_batch_idx, 0}, {current_batch_idx + 1, m_config.max_position_embeddings}));
 
     // text embeddings
     m_request.set_tensor("input_ids", input_ids);
@@ -151,5 +159,5 @@ ov::Tensor CLIPTextModel::get_output_tensor(const size_t idx) {
     return m_request.get_output_tensor(idx);
 }
 
-} // namespace genai
-} // namespace ov
+}  // namespace genai
+}  // namespace ov

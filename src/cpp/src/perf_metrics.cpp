@@ -2,10 +2,12 @@
 // SPDX-License-Identifier: Apache-2.0
 
 #include "openvino/genai/perf_metrics.hpp"
-#include "openvino/openvino.hpp"
-#include <tuple>
-#include <numeric>
+
 #include <cmath>
+#include <numeric>
+#include <tuple>
+
+#include "openvino/openvino.hpp"
 
 namespace ov {
 namespace genai {
@@ -15,17 +17,22 @@ ov::genai::MeanStdPair calc_mean_and_std(const std::vector<ov::genai::MicroSecon
         return {-1, -1};
     }
     // Accepts time durations in microseconds and returns standard deviation and mean in milliseconds.
-    float mean = std::accumulate(durations.begin(), durations.end(), 0.0f, 
-        [](const float& acc, const ov::genai::MicroSeconds& duration) -> float {
-            return acc + duration.count() / 1000.0f;
-        });
+    float mean = std::accumulate(durations.begin(),
+                                 durations.end(),
+                                 0.0f,
+                                 [](const float& acc, const ov::genai::MicroSeconds& duration) -> float {
+                                     return acc + duration.count() / 1000.0f;
+                                 });
     mean /= durations.size();
-    
-    float sum_square_durations = std::accumulate(durations.begin(), durations.end(), 0.0f,
-        [](const float& acc, const ov::genai::MicroSeconds& duration) -> float {
-            auto d = duration.count() / 1000.0f;
-            return acc + d * d;
-        });
+
+    float sum_square_durations =
+        std::accumulate(durations.begin(),
+                        durations.end(),
+                        0.0f,
+                        [](const float& acc, const ov::genai::MicroSeconds& duration) -> float {
+                            auto d = duration.count() / 1000.0f;
+                            return acc + d * d;
+                        });
     float std = std::sqrt(sum_square_durations / durations.size() - mean * mean);
     return {mean, std};
 }
@@ -89,10 +96,11 @@ float PerfMetrics::get_microsec(std::chrono::steady_clock::duration duration) {
 }
 
 void PerfMetrics::evaluate_statistics(std::optional<TimePoint> start_time) {
-    if (m_evaluated){
+    if (m_evaluated) {
         return;
     }
-    // If start_item is specified then recalculate durations according to start times and calculate statistics only after that.
+    // If start_item is specified then recalculate durations according to start times and calculate statistics only
+    // after that.
     if (start_time.has_value()) {
         auto start_time_val = *start_time;
         auto& tok_times = raw_metrics.m_new_token_times;
@@ -103,10 +111,10 @@ void PerfMetrics::evaluate_statistics(std::optional<TimePoint> start_time) {
         raw_metrics.m_times_to_first_token = std::vector<MicroSeconds>();
         raw_metrics.m_times_to_first_token.emplace_back(ttft / batch_sizes[0]);
         num_generated_tokens = batch_sizes[0];
-        
-        // The very first infer request (prefill stage) is slower than subsequent ones since we process a sequence of tokens.
-        // To have a clearer TPOT number, the time taken to generate the very first token at the prefill stage 
-        // must not be included in the TPOT calculation. The first duration used for TPOT is from the first token 
+
+        // The very first infer request (prefill stage) is slower than subsequent ones since we process a sequence of
+        // tokens. To have a clearer TPOT number, the time taken to generate the very first token at the prefill stage
+        // must not be included in the TPOT calculation. The first duration used for TPOT is from the first token
         // to the second token, not from the start time to the first token.
         for (size_t i = 1; i < tok_times.size(); ++i) {
             // If in 10 ms a batch of 5 new tokens is generated then TPOT is 10 / 5 = 2 tok/ms.
@@ -114,7 +122,7 @@ void PerfMetrics::evaluate_statistics(std::optional<TimePoint> start_time) {
             num_generated_tokens += batch_sizes[i];
         }
     }
-    
+
     // calc_mean_and_std will convert microsecond to milliseconds.
     tpot = calc_mean_and_std(raw_metrics.m_durations);
     ipot = calc_mean_and_std(raw_metrics.m_token_infer_durations);
@@ -132,7 +140,7 @@ void PerfMetrics::evaluate_statistics(std::optional<TimePoint> start_time) {
 
 PerfMetrics PerfMetrics::operator+(const PerfMetrics& right) const {
     OPENVINO_ASSERT(right.load_time == load_time, "generation metrics can be accumulated only for the same pipeline");
-    
+
     // Copy left value to res.
     PerfMetrics res = *this;
 
@@ -143,9 +151,11 @@ PerfMetrics PerfMetrics::operator+(const PerfMetrics& right) const {
     auto& right_durations = right.raw_metrics.m_durations;
     auto& right_batch_sizes = right.raw_metrics.m_batch_sizes;
     auto& right_times_to_first_token = right.raw_metrics.m_times_to_first_token;
-    
+
     new_durations.insert(new_durations.end(), right_durations.begin(), right_durations.end());
-    new_times_to_first_token.insert(new_times_to_first_token.end(), right_times_to_first_token.begin(), right_times_to_first_token.end());
+    new_times_to_first_token.insert(new_times_to_first_token.end(),
+                                    right_times_to_first_token.begin(),
+                                    right_times_to_first_token.end());
     new_batch_sizes.insert(new_batch_sizes.end(), right_batch_sizes.begin(), right_batch_sizes.end());
 
     // Concatenate tokenization/detokenization and total generation times.
@@ -155,7 +165,7 @@ PerfMetrics PerfMetrics::operator+(const PerfMetrics& right) const {
     auto& right_tok_durations = right.raw_metrics.tokenization_durations;
     auto& right_detok_durations = right.raw_metrics.detokenization_durations;
     auto& right_gen_durations = right.raw_metrics.generate_durations;
-    
+
     new_tok_durations.insert(new_tok_durations.end(), right_tok_durations.begin(), right_tok_durations.end());
     new_detok_durations.insert(new_detok_durations.end(), right_detok_durations.begin(), right_detok_durations.end());
     new_gen_durations.insert(new_gen_durations.end(), right_gen_durations.begin(), right_gen_durations.end());
@@ -171,5 +181,5 @@ PerfMetrics& PerfMetrics::operator+=(const PerfMetrics& right) {
     return *this;
 }
 
-} // namespace genai
-} // namespace ov
+}  // namespace genai
+}  // namespace ov

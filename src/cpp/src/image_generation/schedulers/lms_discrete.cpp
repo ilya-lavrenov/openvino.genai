@@ -62,7 +62,6 @@ float lms_derivative(float tau, int32_t order, int32_t curr_order, const std::ve
 
 }  // namespace
 
-
 namespace ov {
 namespace genai {
 
@@ -108,12 +107,10 @@ LMSDiscreteScheduler::Config::Config(const std::filesystem::path& scheduler_conf
     read_json_param(data, "steps_offset", steps_offset);
 }
 
-LMSDiscreteScheduler::LMSDiscreteScheduler(const std::filesystem::path& scheduler_config_path) 
-    : LMSDiscreteScheduler(Config(scheduler_config_path)) {
-}
+LMSDiscreteScheduler::LMSDiscreteScheduler(const std::filesystem::path& scheduler_config_path)
+    : LMSDiscreteScheduler(Config(scheduler_config_path)) {}
 
-LMSDiscreteScheduler::LMSDiscreteScheduler(const Config& scheduler_config)
-    : m_config(scheduler_config) {
+LMSDiscreteScheduler::LMSDiscreteScheduler(const Config& scheduler_config) : m_config(scheduler_config) {
     if (!m_config.trained_betas.empty()) {
         m_betas = m_config.trained_betas;
     } else if (m_config.beta_schedule == BetaSchedule::LINEAR) {
@@ -122,18 +119,22 @@ LMSDiscreteScheduler::LMSDiscreteScheduler(const Config& scheduler_config)
         float start = std::sqrt(m_config.beta_start);
         float end = std::sqrt(m_config.beta_end);
         m_betas = linspace<float>(start, end, m_config.num_train_timesteps);
-        std::for_each(m_betas.begin(), m_betas.end(), [] (float & x) { x *= x; });
+        std::for_each(m_betas.begin(), m_betas.end(), [](float& x) {
+            x *= x;
+        });
     } else {
-        OPENVINO_THROW("'beta_schedule' must be one of 'EPSILON' or 'SCALED_LINEAR'. Please, add support of other types");
+        OPENVINO_THROW(
+            "'beta_schedule' must be one of 'EPSILON' or 'SCALED_LINEAR'. Please, add support of other types");
     }
 
     // generates alphas
-    std::transform(m_betas.begin(), m_betas.end(), std::back_inserter(m_alphas), [] (float b) { return 1.0f - b; });
+    std::transform(m_betas.begin(), m_betas.end(), std::back_inserter(m_alphas), [](float b) {
+        return 1.0f - b;
+    });
 
     std::vector<float> log_sigma_vec;
     for (size_t i = 1; i <= m_alphas.size(); i++) {
-        float alphas_cumprod =
-            std::accumulate(m_alphas.begin(), m_alphas.begin() + i, 1.0f, std::multiplies<float>{});
+        float alphas_cumprod = std::accumulate(m_alphas.begin(), m_alphas.begin() + i, 1.0f, std::multiplies<float>{});
         float sigma = std::sqrt((1 - alphas_cumprod) / alphas_cumprod);
         m_log_sigmas.push_back(std::log(sigma));
     }
@@ -146,7 +147,7 @@ float LMSDiscreteScheduler::get_init_noise_sigma() const {
         m_config.timestep_spacing == TimestepSpacing::TRAILING) {
         return max_sigma;
     }
- 
+
     return std::sqrt(max_sigma * max_sigma + 1);
 }
 
@@ -175,7 +176,7 @@ void LMSDiscreteScheduler::set_timesteps(size_t num_inference_steps, float stren
     }
 
     m_sigmas.push_back(0.f);
- 
+
     // initialize timesteps
     for (size_t i = 0; i < num_inference_steps; ++i) {
         int64_t timestep = _sigma_to_t(m_sigmas[i]);
@@ -187,7 +188,10 @@ std::vector<int64_t> LMSDiscreteScheduler::get_timesteps() const {
     return m_timesteps;
 }
 
-std::map<std::string, ov::Tensor> LMSDiscreteScheduler::step(ov::Tensor noise_pred, ov::Tensor latents, size_t inference_step, std::shared_ptr<Generator> generator) {
+std::map<std::string, ov::Tensor> LMSDiscreteScheduler::step(ov::Tensor noise_pred,
+                                                             ov::Tensor latents,
+                                                             size_t inference_step,
+                                                             std::shared_ptr<Generator> generator) {
     const float sigma = m_sigmas[inference_step];
 
     // LMS step function:
@@ -198,19 +202,19 @@ std::map<std::string, ov::Tensor> LMSDiscreteScheduler::step(ov::Tensor noise_pr
         // 1. compute predicted original sample (x_0) from sigma-scaled predicted noise
         float pred_latent = 0;
         switch (m_config.prediction_type) {
-            case PredictionType::EPSILON:
-                pred_latent = latents.data<float>()[j] - sigma * noise_pred.data<float>()[j];
-                break;
-            case PredictionType::SAMPLE:
-                pred_latent = noise_pred.data<float>()[j];
-                break;
-            case PredictionType::V_PREDICTION:
-                // pred_original_sample = model_output * (-sigma / (sigma**2 + 1) ** 0.5) + (sample / (sigma**2 + 1))
-                pred_latent = noise_pred.data<float>()[j] * (-sigma / std::sqrt(sigma * sigma + 1.0f) + 
-                    latents.data<float>()[j] / (sigma * sigma + 1.0f));
-                break;
-            default:
-                OPENVINO_THROW("Unsupported value for 'PredictionType'");
+        case PredictionType::EPSILON:
+            pred_latent = latents.data<float>()[j] - sigma * noise_pred.data<float>()[j];
+            break;
+        case PredictionType::SAMPLE:
+            pred_latent = noise_pred.data<float>()[j];
+            break;
+        case PredictionType::V_PREDICTION:
+            // pred_original_sample = model_output * (-sigma / (sigma**2 + 1) ** 0.5) + (sample / (sigma**2 + 1))
+            pred_latent = noise_pred.data<float>()[j] * (-sigma / std::sqrt(sigma * sigma + 1.0f) +
+                                                         latents.data<float>()[j] / (sigma * sigma + 1.0f));
+            break;
+        default:
+            OPENVINO_THROW("Unsupported value for 'PredictionType'");
         }
         // 2. Convert to an ODE derivative
         derivative.push_back((latents.data<float>()[j] - pred_latent) / sigma);
@@ -228,15 +232,19 @@ std::map<std::string, ov::Tensor> LMSDiscreteScheduler::step(ov::Tensor noise_pr
 
     std::vector<float> lms_coeffs(order);
     for (size_t curr_order = 0; curr_order < order; curr_order++) {
-        auto lms_derivative_functor = [order, curr_order, sigmas = this->m_sigmas, inference_step] (float tau) {
+        auto lms_derivative_functor = [order, curr_order, sigmas = this->m_sigmas, inference_step](float tau) {
             return lms_derivative(tau, order, curr_order, sigmas, inference_step);
         };
         // integrated_coeff = integrate.quad(lms_derivative, self.sigmas[t], self.sigmas[t + 1], epsrel=1e-4)[0]
-        lms_coeffs[curr_order] = trapezoidal(lms_derivative_functor, static_cast<double>(sigma), static_cast<double>(m_sigmas[inference_step + 1]), 1e-4);
+        lms_coeffs[curr_order] = trapezoidal(lms_derivative_functor,
+                                             static_cast<double>(sigma),
+                                             static_cast<double>(m_sigmas[inference_step + 1]),
+                                             1e-4);
     }
 
     // 4. Compute previous sample based on the derivatives path
-    // prev_sample = sample + sum(coeff * derivative for coeff, derivative in zip(lms_coeffs, reversed(self.derivatives)))
+    // prev_sample = sample + sum(coeff * derivative for coeff, derivative in zip(lms_coeffs,
+    // reversed(self.derivatives)))
     ov::Tensor prev_sample(latents.get_element_type(), latents.get_shape());
     float* prev_sample_data = prev_sample.data<float>();
     const float* latents_data = latents.data<const float>();
@@ -259,5 +267,5 @@ void LMSDiscreteScheduler::add_noise(ov::Tensor init_latent, ov::Tensor noise, i
     OPENVINO_THROW("Not implemented");
 }
 
-} // namespace genai
-} // namespace ov
+}  // namespace genai
+}  // namespace ov

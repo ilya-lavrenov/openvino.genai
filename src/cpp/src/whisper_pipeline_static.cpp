@@ -7,6 +7,16 @@
 #include <regex>
 
 #include "debug_utils.hpp"
+#include "openvino/core/layout.hpp"
+#include "openvino/core/preprocess/pre_post_process.hpp"
+#include "openvino/op/convert.hpp"
+#include "openvino/op/greater.hpp"
+#include "openvino/op/parameter.hpp"
+#include "openvino/op/range.hpp"
+#include "openvino/pass/graph_rewrite.hpp"
+#include "openvino/pass/manager.hpp"
+#include "openvino/pass/pattern/matcher.hpp"
+#include "openvino/pass/pattern/op/wrap_type.hpp"
 #include "openvino/runtime/intel_npu/properties.hpp"
 #include "utils.hpp"
 #include "whisper/logit_processor.hpp"
@@ -14,17 +24,6 @@
 #include "whisper/timestamps.hpp"
 #include "whisper/whisper.hpp"
 #include "whisper/whisper_config.hpp"
-
-#include "openvino/core/layout.hpp"
-#include "openvino/core/preprocess/pre_post_process.hpp"
-#include "openvino/pass/pattern/matcher.hpp"
-#include "openvino/pass/pattern/op/wrap_type.hpp"
-#include "openvino/pass/graph_rewrite.hpp"
-#include "openvino/pass/manager.hpp"
-#include "openvino/op/range.hpp"
-#include "openvino/op/greater.hpp"
-#include "openvino/op/convert.hpp"
-#include "openvino/op/parameter.hpp"
 
 namespace {
 
@@ -81,7 +80,8 @@ void set_cross_attn_key_value(ov::InferRequest& source, ov::InferRequest& dest) 
         if (source_output_name.find("encoder") == std::string::npos) {
             continue;
         }
-        std::string with_past_input_name = std::regex_replace(source_output_name, std::regex("present"), "past_key_values");
+        std::string with_past_input_name =
+            std::regex_replace(source_output_name, std::regex("present"), "past_key_values");
         dest.set_tensor(with_past_input_name, source.get_tensor(source_output_name));
     }
 }
@@ -101,7 +101,8 @@ void update_past_key_value(ov::InferRequest& source, ov::InferRequest& dest, con
             continue;
         }
 
-        std::string with_past_input_name = std::regex_replace(source_output_name, std::regex("present"), "past_key_values");
+        std::string with_past_input_name =
+            std::regex_replace(source_output_name, std::regex("present"), "past_key_values");
 
         auto src_kv_tensor = source.get_tensor(source_output_name);
         auto dst_kv_tensor = dest.get_tensor(with_past_input_name);
@@ -201,7 +202,7 @@ void zero_past_key_values(ov::InferRequest& request) {
 
 void prepare_decoder_with_past(ov::InferRequest& decoder_with_past, ov::InferRequest& decoder) {
     // NB: Prepare attetion mask to be in a format [0, 0, 0, 1, 1, 1, 1, ..., 0, 1]
-    // Mask should be inverted for decoder_with_past 
+    // Mask should be inverted for decoder_with_past
     auto attention_mask = decoder_with_past.get_tensor("attention_mask");
     auto* attention_mask_ptr = attention_mask.data<ov::float16>();
     std::fill(attention_mask_ptr, attention_mask_ptr + 3u, 0);
@@ -394,12 +395,14 @@ void add_attention_mask_input(std::shared_ptr<ov::Model> model) {
     pm.run_passes(model);
 }
 
-
 ov::PartialShape get_encoder_hidden_state_shape(const std::shared_ptr<ov::Model>& encoder) {
     return encoder->output("last_hidden_state").get_partial_shape();
 }
 
-void reshape_to_static(std::shared_ptr<ov::Model> model, const uint32_t input_size, const uint32_t kvcache_size, const ov::PartialShape& lhstate_shape) {
+void reshape_to_static(std::shared_ptr<ov::Model> model,
+                       const uint32_t input_size,
+                       const uint32_t kvcache_size,
+                       const ov::PartialShape& lhstate_shape) {
     std::map<std::string, ov::PartialShape> new_shapes;
     for (auto input : model->inputs()) {
         const auto& input_name = input.get_any_name();
@@ -415,7 +418,7 @@ void reshape_to_static(std::shared_ptr<ov::Model> model, const uint32_t input_si
         } else if (input_name.find("encoder_hidden_states") != std::string::npos) {
             const auto& partial_shape = input.get_partial_shape();
             new_shape = partial_shape;
-            new_shape[0] = 1;     // batch_dim
+            new_shape[0] = 1;                 // batch_dim
             new_shape[1] = lhstate_shape[1];  // from encoder output{'last_hidden_state'}
             new_shape[2] = lhstate_shape[2];
         } else if (input_name.find("past_key_values") != std::string::npos) {
@@ -423,8 +426,8 @@ void reshape_to_static(std::shared_ptr<ov::Model> model, const uint32_t input_si
             new_shape = partial_shape;
             new_shape[0] = 1;  // Use batch dim here
             new_shape[2] = input_name.find(".decoder") != std::string::npos
-                               ? kvcache_size - input_size // kv_size for decoder
-                               : lhstate_shape[1];  // hidden state size for encoder
+                               ? kvcache_size - input_size  // kv_size for decoder
+                               : lhstate_shape[1];          // hidden state size for encoder
         }
         new_shapes.emplace(input_name, new_shape);
     }
@@ -471,7 +474,9 @@ void preprocess_decoder(std::shared_ptr<ov::Model> model) {
             preprocessor.input("attention_mask").preprocess().convert_element_type();
         } else if (tensor.get_any_name().find("encoder_hidden_states") != std::string::npos) {
             preprocessor.input("encoder_hidden_states").tensor().set_element_type(ov::element::Type_t::f16);
-            preprocessor.input("encoder_hidden_states").preprocess().convert_element_type(ov::element::Type_t::f32); // ()
+            preprocessor.input("encoder_hidden_states")
+                .preprocess()
+                .convert_element_type(ov::element::Type_t::f32);  // ()
         } else if (tensor.get_any_name().find("past_key_values") != std::string::npos) {
             preprocessor.input(tensor.get_any_name()).tensor().set_element_type(ov::element::Type_t::f16);
             preprocessor.input(tensor.get_any_name()).preprocess().convert_element_type();

@@ -107,8 +107,7 @@ if(OpenVINODeveloperPackage_FOUND)
     # ov_add_vs_version_file(NAME ${TARGET_NAME}
     #                        FILEDESCRIPTION "OpenVINO GenAI library")
 
-    # TODO: commit changes separately
-    # ov_add_clang_format_target(${TARGET_NAME}_clang FOR_TARGETS ${TARGET_NAME})
+    ov_add_clang_format_target(${TARGET_NAME}_clang FOR_TARGETS ${TARGET_NAME})
 endif()
 
 # - Windows: `<openvino_dir>\runtime\bin\intel64\Release\`

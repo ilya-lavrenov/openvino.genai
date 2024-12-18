@@ -1,11 +1,12 @@
 // Copyright (C) 2023-2024 Intel Corporation
 // SPDX-License-Identifier: Apache-2.0
 
-#include <filesystem>
+#include <pybind11/functional.h>
 #include <pybind11/pybind11.h>
 #include <pybind11/stl.h>
 #include <pybind11/stl_bind.h>
-#include <pybind11/functional.h>
+
+#include <filesystem>
 
 #include "openvino/genai/perf_metrics.hpp"
 #include "py_utils.hpp"
@@ -110,41 +111,47 @@ std::vector<double> timestamp_to_ms(const T& instance, U T::*member) {
     std::vector<double> res;
     const auto& timestamps = instance.*member;
     res.reserve(timestamps.size());
-    std::transform(timestamps.begin(), timestamps.end(), std::back_inserter(res),
-                   [](const auto& timestamp) { 
-                        return std::chrono::duration<double, std::milli>(timestamp.time_since_epoch()).count(); 
-                    });
+    std::transform(timestamps.begin(), timestamps.end(), std::back_inserter(res), [](const auto& timestamp) {
+        return std::chrono::duration<double, std::milli>(timestamp.time_since_epoch()).count();
+    });
     return res;
 }
 
-} // namespace
+}  // namespace
 
 void init_perf_metrics(py::module_& m) {
     py::class_<RawPerfMetrics>(m, "RawPerfMetrics", raw_perf_metrics_docstring)
         .def(py::init<>())
-        .def_property_readonly("generate_durations", [](const RawPerfMetrics &rw) {
-            return pyutils::get_ms(rw, &RawPerfMetrics::generate_durations);
-        })
-        .def_property_readonly("tokenization_durations", [](const RawPerfMetrics &rw) { 
-            return pyutils::get_ms(rw, &RawPerfMetrics::tokenization_durations);
-        })
-        .def_property_readonly("detokenization_durations", [](const RawPerfMetrics &rw) { 
-            return pyutils::get_ms(rw, &RawPerfMetrics::detokenization_durations); 
-        })
-        .def_property_readonly("m_times_to_first_token", [](const RawPerfMetrics &rw) {
-            return pyutils::get_ms(rw, &RawPerfMetrics::m_times_to_first_token);
-        })
-        .def_property_readonly("m_new_token_times", [](const RawPerfMetrics &rw) {
-            return timestamp_to_ms(rw, &RawPerfMetrics::m_new_token_times);
-        })
-        .def_property_readonly("token_infer_durations", [](const RawPerfMetrics &rw) {
-            return pyutils::get_ms(rw, &RawPerfMetrics::m_token_infer_durations);
-        })
+        .def_property_readonly("generate_durations",
+                               [](const RawPerfMetrics& rw) {
+                                   return pyutils::get_ms(rw, &RawPerfMetrics::generate_durations);
+                               })
+        .def_property_readonly("tokenization_durations",
+                               [](const RawPerfMetrics& rw) {
+                                   return pyutils::get_ms(rw, &RawPerfMetrics::tokenization_durations);
+                               })
+        .def_property_readonly("detokenization_durations",
+                               [](const RawPerfMetrics& rw) {
+                                   return pyutils::get_ms(rw, &RawPerfMetrics::detokenization_durations);
+                               })
+        .def_property_readonly("m_times_to_first_token",
+                               [](const RawPerfMetrics& rw) {
+                                   return pyutils::get_ms(rw, &RawPerfMetrics::m_times_to_first_token);
+                               })
+        .def_property_readonly("m_new_token_times",
+                               [](const RawPerfMetrics& rw) {
+                                   return timestamp_to_ms(rw, &RawPerfMetrics::m_new_token_times);
+                               })
+        .def_property_readonly("token_infer_durations",
+                               [](const RawPerfMetrics& rw) {
+                                   return pyutils::get_ms(rw, &RawPerfMetrics::m_token_infer_durations);
+                               })
         .def_readonly("m_batch_sizes", &RawPerfMetrics::m_batch_sizes)
-        .def_property_readonly("m_durations", [](const RawPerfMetrics &rw) {
-            return pyutils::get_ms(rw, &RawPerfMetrics::m_durations);
-        })
-        .def_property_readonly("inference_durations", [](const RawPerfMetrics &rw) {
+        .def_property_readonly("m_durations",
+                               [](const RawPerfMetrics& rw) {
+                                   return pyutils::get_ms(rw, &RawPerfMetrics::m_durations);
+                               })
+        .def_property_readonly("inference_durations", [](const RawPerfMetrics& rw) {
             return pyutils::get_ms(rw, &RawPerfMetrics::m_inference_durations);
         });
 
@@ -152,9 +159,12 @@ void init_perf_metrics(py::module_& m) {
         .def(py::init<>())
         .def_readonly("mean", &MeanStdPair::mean)
         .def_readonly("std", &MeanStdPair::std)
-        .def("__iter__", [](const MeanStdPair &self) {
-            return py::make_iterator(&self.mean, &self.std + 1);
-        }, py::keep_alive<0, 1>());  // Keep object alive while the iterator is used;
+        .def(
+            "__iter__",
+            [](const MeanStdPair& self) {
+                return py::make_iterator(&self.mean, &self.std + 1);
+            },
+            py::keep_alive<0, 1>());  // Keep object alive while the iterator is used;
 
     py::class_<PerfMetrics>(m, "PerfMetrics", perf_metrics_docstring)
         .def(py::init<>())

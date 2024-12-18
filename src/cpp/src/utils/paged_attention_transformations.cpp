@@ -21,7 +21,9 @@ size_t get_kv_cache_size(const std::shared_ptr<ov::Model> model) {
     // extract num_kv_heads and head_size
     size_t kv_caches_inputs_offset = 2;
     ov::PartialShape k_shape = parameters[kv_caches_inputs_offset]->get_partial_shape();
-    OPENVINO_ASSERT(k_shape.rank().get_length() == 3, "KV cache shape is expected to have rank 3, while shape is ", k_shape);
+    OPENVINO_ASSERT(k_shape.rank().get_length() == 3,
+                    "KV cache shape is expected to have rank 3, while shape is ",
+                    k_shape);
     size_t num_kv_heads = k_shape[1].get_length(), head_size = k_shape[2].get_length();
     return num_kv_heads * head_size;
 }
@@ -43,8 +45,7 @@ void set_kv_cache_type_and_shape(std::shared_ptr<ov::Model> model, DeviceConfig&
         const auto& name = param_ptr->get_friendly_name();
         if (name.find("key_cache.") == 0) {
             key_cache_params[name] = param_ptr;
-        }
-        else if (name.find("value_cache.") == 0) {
+        } else if (name.find("value_cache.") == 0) {
             value_cache_params[name] = param_ptr;
         }
     }
@@ -55,14 +56,18 @@ void set_kv_cache_type_and_shape(std::shared_ptr<ov::Model> model, DeviceConfig&
     size_t num_layers = key_cache_params.size();
     // extract num_kv_heads and head_size
     std::string key_cache_param_name = "key_cache.0";
-    OPENVINO_ASSERT(key_cache_params.count(key_cache_param_name) != 0, "key_cache.0 tensor not found among model parameters");
+    OPENVINO_ASSERT(key_cache_params.count(key_cache_param_name) != 0,
+                    "key_cache.0 tensor not found among model parameters");
     ov::PartialShape k_shape = key_cache_params[key_cache_param_name]->get_partial_shape();
-    OPENVINO_ASSERT(k_shape.rank().get_length() == 3, "KV cache shape is expected to have rank 3, while shape is ", k_shape);
+    OPENVINO_ASSERT(k_shape.rank().get_length() == 3,
+                    "KV cache shape is expected to have rank 3, while shape is ",
+                    k_shape);
     size_t num_kv_heads = k_shape[1].get_length(), head_size = k_shape[2].get_length();
 
     device_config.set_model_params(num_kv_heads, head_size, num_layers);
 
-    for (auto it_k = key_cache_params.begin(), it_v = value_cache_params.begin(); it_k != key_cache_params.end();++it_k, ++it_v) {
+    for (auto it_k = key_cache_params.begin(), it_v = value_cache_params.begin(); it_k != key_cache_params.end();
+         ++it_k, ++it_v) {
         it_k->second->set_element_type(device_config.get_cache_precision());
         it_v->second->set_element_type(device_config.get_cache_precision());
         // TODO: CVS-145270
@@ -73,7 +78,9 @@ void set_kv_cache_type_and_shape(std::shared_ptr<ov::Model> model, DeviceConfig&
     model->validate_nodes_and_infer_types();
 }
 
-void apply_paged_attention_transformations(std::shared_ptr<ov::Model> model, DeviceConfig& device_config, bool per_layer_cache_control) {
+void apply_paged_attention_transformations(std::shared_ptr<ov::Model> model,
+                                           DeviceConfig& device_config,
+                                           bool per_layer_cache_control) {
     apply_paged_attention_transformations(model, per_layer_cache_control);
     set_kv_cache_type_and_shape(model, device_config);
 }

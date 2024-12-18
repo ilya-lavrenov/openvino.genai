@@ -1,15 +1,15 @@
 // Copyright (C) 2023-2024 Intel Corporation
 // SPDX-License-Identifier: Apache-2.0
 
+#include "openvino/genai/generation_config.hpp"
+
 #include <fstream>
 #include <limits>
-
 #include <nlohmann/json.hpp>
 #include <openvino/runtime/core.hpp>
-#include "openvino/genai/generation_config.hpp"
+
 #include "json_utils.hpp"
 #include "utils.hpp"
-
 
 namespace ov {
 namespace genai {
@@ -72,8 +72,11 @@ void GenerationConfig::set_eos_token_id(size_t tokenizer_eos_token_id) {
         eos_token_id = tokenizer_eos_token_id;
     } else {
         OPENVINO_ASSERT(eos_token_id == tokenizer_eos_token_id,
-            "EOS token ID is different in generation config (", eos_token_id, ") and tokenizer (",
-            tokenizer_eos_token_id, ")");
+                        "EOS token ID is different in generation config (",
+                        eos_token_id,
+                        ") and tokenizer (",
+                        tokenizer_eos_token_id,
+                        ")");
     }
     // Merge user defined stop tokens with model EOS token
     stop_token_ids.insert(eos_token_id);
@@ -144,29 +147,26 @@ bool GenerationConfig::is_prompt_lookup() const {
 }
 
 void GenerationConfig::validate() const {
-    OPENVINO_ASSERT(eos_token_id == -1 || stop_token_ids.find(eos_token_id) != stop_token_ids.end(),
+    OPENVINO_ASSERT(
+        eos_token_id == -1 || stop_token_ids.find(eos_token_id) != stop_token_ids.end(),
         "'stop_token_ids' must contain 'eos_token_id'. Please, call 'set_eos_token_id' with 'eos_token_id' value");
 
-    OPENVINO_ASSERT(!do_sample || num_beams == 1, 
+    OPENVINO_ASSERT(!do_sample || num_beams == 1,
                     "Beam search with sampling is not supported yet. "
                     "Please either set do_sample=false to use beam search "
                     "or set num_beams=1 if you with to use multinomial sampling.");
     OPENVINO_ASSERT(num_return_sequences > 0, "num_return_sequences must be greater than 0");
-    OPENVINO_ASSERT(max_new_tokens > 0 || (max_new_tokens == 0 && echo), "'max_new_tokens' must be greater than 0, if `echo` is set, 0 is also accepted");
+    OPENVINO_ASSERT(max_new_tokens > 0 || (max_new_tokens == 0 && echo),
+                    "'max_new_tokens' must be greater than 0, if `echo` is set, 0 is also accepted");
     OPENVINO_ASSERT(min_new_tokens <= max_new_tokens, "min_new_tokens must be less or equal max_new_tokens");
-    OPENVINO_ASSERT(
-        num_beams % num_beam_groups == 0,
-        "number of beams should be divisible by number of groups"
-    );
-    
+    OPENVINO_ASSERT(num_beams % num_beam_groups == 0, "number of beams should be divisible by number of groups");
+
     // max_new_tokens has priority over max_length
     // if max_new_tokens is defined no need to check max_length
-    OPENVINO_ASSERT(max_new_tokens != SIZE_MAX ||  max_length > 0, 
+    OPENVINO_ASSERT(max_new_tokens != SIZE_MAX || max_length > 0,
                     "'max_length' must be greater than 0 or 'max_new_tokens' should be defined");
 
-    OPENVINO_ASSERT(!do_sample || top_k > 0,
-                    "top_k must be a strictly positive, but got ",
-                    top_k);
+    OPENVINO_ASSERT(!do_sample || top_k > 0, "top_k must be a strictly positive, but got ", top_k);
     OPENVINO_ASSERT(!do_sample || (top_p > 0 && top_p <= 1.0f),
                     "top_p must be a positive float > 0 and < 1, but got ",
                     top_p);
@@ -177,7 +177,7 @@ void GenerationConfig::validate() const {
     OPENVINO_ASSERT(repetition_penalty > 0,
                     "Repetition penalty must be a strictly positive float, but got ",
                     repetition_penalty);
-    
+
     OPENVINO_ASSERT(!ignore_eos || max_new_tokens != SIZE_MAX || max_length != SIZE_MAX,
                     "ignore_eos == true, in this case either 'max_new_tokens', or 'max_length' should be defined.");
 
@@ -186,15 +186,22 @@ void GenerationConfig::validate() const {
     if (is_beam_search()) {
         OPENVINO_ASSERT(no_repeat_ngram_size > 0, "no_repeat_ngram_size must be positive");
     } else {
-        OPENVINO_ASSERT(frequency_penalty >= -2.0f && frequency_penalty <= 2.0f, "frequence_penalty penalty must be a [-2; +2]");
-        OPENVINO_ASSERT(presence_penalty >= -2.0f && presence_penalty <= 2.0f, "presence_penalty penalty must be a [-2; +2]");
+        OPENVINO_ASSERT(frequency_penalty >= -2.0f && frequency_penalty <= 2.0f,
+                        "frequence_penalty penalty must be a [-2; +2]");
+        OPENVINO_ASSERT(presence_penalty >= -2.0f && presence_penalty <= 2.0f,
+                        "presence_penalty penalty must be a [-2; +2]");
     }
     if (is_assisting_generation()) {
         if (assistant_confidence_threshold != 0.f) {
-            OPENVINO_ASSERT(num_assistant_tokens == 0, "Parameters `assistant_confidence_threshold` and `num_assistant_tokens` are mutually exclusive in `GenerationConfig`");
-            OPENVINO_ASSERT(!is_prompt_lookup(), "Parameters `assistant_confidence_threshold` cannot be used while Prompt Lookup decoding");
+            OPENVINO_ASSERT(num_assistant_tokens == 0,
+                            "Parameters `assistant_confidence_threshold` and `num_assistant_tokens` are mutually "
+                            "exclusive in `GenerationConfig`");
+            OPENVINO_ASSERT(!is_prompt_lookup(),
+                            "Parameters `assistant_confidence_threshold` cannot be used while Prompt Lookup decoding");
         } else {
-            OPENVINO_ASSERT(num_assistant_tokens > 0, "Parameters `assistant_confidence_threshold` and `num_assistant_tokens` are mutually exclusive in `GenerationConfig`");
+            OPENVINO_ASSERT(num_assistant_tokens > 0,
+                            "Parameters `assistant_confidence_threshold` and `num_assistant_tokens` are mutually "
+                            "exclusive in `GenerationConfig`");
         };
     }
 }

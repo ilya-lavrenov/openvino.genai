@@ -1,17 +1,16 @@
 // Copyright (C) 2023-2024 Intel Corporation
 // SPDX-License-Identifier: Apache-2.0
 
-#include <filesystem>
-
+#include <pybind11/functional.h>
 #include <pybind11/pybind11.h>
 #include <pybind11/stl.h>
-#include <pybind11/stl_bind.h>
 #include <pybind11/stl/filesystem.h>
-#include <pybind11/functional.h>
+#include <pybind11/stl_bind.h>
 #include <pybind11/typing.h>
 
-#include "openvino/genai/llm_pipeline.hpp"
+#include <filesystem>
 
+#include "openvino/genai/llm_pipeline.hpp"
 #include "py_utils.hpp"
 
 namespace py = pybind11;
@@ -58,17 +57,16 @@ auto encoded_results_docstring = R"(
     metrics: performance metrics with tpot, ttft, etc. of type ov::genai::PerfMetrics.
 )";
 
-auto streamer_base_docstring =  R"(
+auto streamer_base_docstring = R"(
     Base class for streamers. In order to use inherit from from this class and implement put, and methods.
 )";
 
-class ConstructableStreamer: public StreamerBase {
+class ConstructableStreamer : public StreamerBase {
     bool put(int64_t token) override {
-        PYBIND11_OVERRIDE_PURE(
-            bool,  // Return type
-            StreamerBase,  // Parent class
-            put,  // Name of function in C++ (must match Python name)
-            token  // Argument(s)
+        PYBIND11_OVERRIDE_PURE(bool,          // Return type
+                               StreamerBase,  // Parent class
+                               put,           // Name of function in C++ (must match Python name)
+                               token          // Argument(s)
         );
     }
     void end() override {
@@ -76,8 +74,7 @@ class ConstructableStreamer: public StreamerBase {
     }
 };
 
-} // namespace
-
+}  // namespace
 
 PYBIND11_MODULE(py_openvino_genai, m) {
     m.doc() = "Pybind11 binding for OpenVINO GenAI library";
@@ -85,19 +82,23 @@ PYBIND11_MODULE(py_openvino_genai, m) {
     init_perf_metrics(m);
     py::class_<DecodedResults>(m, "DecodedResults", decoded_results_docstring)
         .def(py::init<>())
-        .def_property_readonly("texts", [](const DecodedResults &dr) -> py::typing::List<py::str> { return pyutils::handle_utf8((std::vector<std::string>)dr); })
+        .def_property_readonly("texts",
+                               [](const DecodedResults& dr) -> py::typing::List<py::str> {
+                                   return pyutils::handle_utf8((std::vector<std::string>)dr);
+                               })
         .def_readonly("scores", &DecodedResults::scores)
         .def_readonly("perf_metrics", &DecodedResults::perf_metrics)
-        .def("__str__", [](const DecodedResults &dr) -> py::str {
+        .def("__str__", [](const DecodedResults& dr) -> py::str {
             auto valid_utf8_strings = pyutils::handle_utf8((std::vector<std::string>)dr);
             py::str res;
             if (valid_utf8_strings.size() == 1)
                 return valid_utf8_strings[0];
-            
+
             for (size_t i = 0; i < valid_utf8_strings.size() - 1; i++) {
                 res += py::str(std::to_string(dr.scores[i])) + py::str(": ") + valid_utf8_strings[i] + py::str("\n");
             }
-            res += py::str(std::to_string(dr.scores.back())) + py::str(": ") + valid_utf8_strings[valid_utf8_strings.size() - 1];
+            res += py::str(std::to_string(dr.scores.back())) + py::str(": ") +
+                   valid_utf8_strings[valid_utf8_strings.size() - 1];
             return res;
         });
 
@@ -106,10 +107,19 @@ PYBIND11_MODULE(py_openvino_genai, m) {
         .def_readonly("scores", &EncodedResults::scores)
         .def_readonly("perf_metrics", &EncodedResults::perf_metrics);
 
-    py::class_<StreamerBase, ConstructableStreamer, std::shared_ptr<StreamerBase>>(m, "StreamerBase", streamer_base_docstring)  // Change the holder form unique_ptr to shared_ptr
+    py::class_<StreamerBase, ConstructableStreamer, std::shared_ptr<StreamerBase>>(
+        m,
+        "StreamerBase",
+        streamer_base_docstring)  // Change the holder form unique_ptr to shared_ptr
         .def(py::init<>())
-        .def("put", &StreamerBase::put, "Put is called every time new token is decoded. Returns a bool flag to indicate whether generation should be stopped, if return true generation stops", py::arg("token"))
-        .def("end", &StreamerBase::end, "End is called at the end of generation. It can be used to flush cache if your own streamer has one");
+        .def("put",
+             &StreamerBase::put,
+             "Put is called every time new token is decoded. Returns a bool flag to indicate whether generation should "
+             "be stopped, if return true generation stops",
+             py::arg("token"))
+        .def("end",
+             &StreamerBase::end,
+             "End is called at the end of generation. It can be used to flush cache if your own streamer has one");
 
     init_tokenizer(m);
     init_lora_adapter(m);

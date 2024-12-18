@@ -153,25 +153,25 @@ void EulerDiscreteScheduler::set_timesteps(size_t num_inference_steps, float str
     }
 
     switch (m_config.interpolation_type) {
-        case InterpolationType::LINEAR: {
-            using numpy_utils::interp;
+    case InterpolationType::LINEAR: {
+        using numpy_utils::interp;
 
-            std::vector<size_t> x_data_points(sigmas.size());
-            std::iota(x_data_points.begin(), x_data_points.end(), 0);
-            m_sigmas = interp(m_timesteps, x_data_points, sigmas);
-            break;
-        }
-        case InterpolationType::LOG_LINEAR: {
-            using numpy_utils::linspace;
+        std::vector<size_t> x_data_points(sigmas.size());
+        std::iota(x_data_points.begin(), x_data_points.end(), 0);
+        m_sigmas = interp(m_timesteps, x_data_points, sigmas);
+        break;
+    }
+    case InterpolationType::LOG_LINEAR: {
+        using numpy_utils::linspace;
 
-            m_sigmas = linspace<float>(std::log(sigmas.back()), std::log(sigmas[0]), num_inference_steps + 1, true);
-            std::transform(m_sigmas.begin(), m_sigmas.end(), m_sigmas.begin(), [](float x) {
-                return std::exp(x);
-            });
-            break;
-        }
-        default:
-            OPENVINO_THROW("Unsupported value for 'interpolation_type'");
+        m_sigmas = linspace<float>(std::log(sigmas.back()), std::log(sigmas[0]), num_inference_steps + 1, true);
+        std::transform(m_sigmas.begin(), m_sigmas.end(), m_sigmas.begin(), [](float x) {
+            return std::exp(x);
+        });
+        break;
+    }
+    default:
+        OPENVINO_THROW("Unsupported value for 'interpolation_type'");
     }
 
     OPENVINO_ASSERT(!m_config.use_karras_sigmas,
@@ -195,7 +195,8 @@ void EulerDiscreteScheduler::set_timesteps(size_t num_inference_steps, float str
     m_sigmas.push_back(sigma_last);
 
     // apply 'strength' used in image generation
-    // in diffusers, it's https://github.com/huggingface/diffusers/blob/v0.31.0/src/diffusers/pipelines/stable_diffusion_xl/pipeline_stable_diffusion_xl_img2img.py#L650
+    // in diffusers, it's
+    // https://github.com/huggingface/diffusers/blob/v0.31.0/src/diffusers/pipelines/stable_diffusion_xl/pipeline_stable_diffusion_xl_img2img.py#L650
     {
         size_t init_timestep = std::min<size_t>(num_inference_steps * strength, num_inference_steps);
         size_t t_start = std::max<size_t>(num_inference_steps - init_timestep, 0);
@@ -207,7 +208,10 @@ void EulerDiscreteScheduler::set_timesteps(size_t num_inference_steps, float str
     }
 }
 
-std::map<std::string, ov::Tensor> EulerDiscreteScheduler::step(ov::Tensor noise_pred, ov::Tensor latents, size_t inference_step, std::shared_ptr<Generator> generator) {
+std::map<std::string, ov::Tensor> EulerDiscreteScheduler::step(ov::Tensor noise_pred,
+                                                               ov::Tensor latents,
+                                                               size_t inference_step,
+                                                               std::shared_ptr<Generator> generator) {
     // noise_pred - model_output
     // latents - sample
     // inference_step
@@ -304,8 +308,8 @@ size_t EulerDiscreteScheduler::_index_for_timestep(int64_t timestep) const {
 void EulerDiscreteScheduler::add_noise(ov::Tensor init_latent, ov::Tensor noise, int64_t latent_timestep) const {
     const float sigma = m_sigmas[_index_for_timestep(latent_timestep)];
 
-    float * init_latent_data = init_latent.data<float>();
-    const float * noise_data = noise.data<float>();
+    float* init_latent_data = init_latent.data<float>();
+    const float* noise_data = noise.data<float>();
 
     for (size_t i = 0; i < init_latent.get_size(); ++i) {
         init_latent_data[i] = init_latent_data[i] + sigma * noise_data[i];
